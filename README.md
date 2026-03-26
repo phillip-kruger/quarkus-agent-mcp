@@ -1,6 +1,6 @@
 # Quarkus Agent MCP
 
-A standalone MCP server that enables AI coding agents to create, manage, and interact with Quarkus applications. It runs as a separate process that survives app crashes, giving agents the ability to create projects, control application lifecycle (start/stop/restart), proxy Dev MCP tools, and search Quarkus documentation.
+A standalone MCP server that enables AI coding agents to create, manage, and interact with Quarkus applications. It runs as a separate process that survives app crashes, giving agents the ability to create projects, check for updates, read extension skills, control application lifecycle, proxy Dev MCP tools, and search Quarkus documentation.
 
 Part of the [DevStar](https://github.com/quarkusio/quarkus/discussions/53093) working group.
 
@@ -88,50 +88,55 @@ If the MCP server is working, the agent will use `quarkus/searchDocs` and return
 
 ## Usage
 
-### Creating and developing a Quarkus app
+### Creating a new Quarkus app
 
-Once the MCP server is registered with your coding agent, you can ask the agent to build Quarkus applications using natural language. The agent uses the MCP tools automatically.
+Ask your agent to build a Quarkus application using natural language. The agent uses the MCP tools automatically.
 
 **Example conversation:**
 
 > **You:** Create a Quarkus REST API with a greeting endpoint and a PostgreSQL database
 >
-> **Agent:** _(uses `quarkus/searchDocs` to look up REST and datasource configuration, then `quarkus/create` to scaffold the project with `rest-jackson,jdbc-postgresql,hibernate-orm-panache` extensions — the app starts automatically in dev mode)_
+> **Agent:** _(uses `quarkus/create` to scaffold the project with `rest-jackson,jdbc-postgresql,hibernate-orm-panache` extensions — the app starts automatically in dev mode, and a `CLAUDE.md` is generated with project-specific workflow instructions)_
+>
+> **Agent:** _(calls `quarkus/skills` to learn the correct patterns for Panache, REST, and other extensions before writing any code)_
 >
 > **You:** Add a `Greeting` entity and a REST endpoint that stores and retrieves greetings
 >
-> **Agent:** _(uses `quarkus/searchDocs` to look up Panache entity patterns, writes the code, then uses `quarkus/searchTools` to find continuous testing tools, resumes testing, checks `quarkus/logs` for test results)_
+> **Agent:** _(writes the code following patterns from skills, then runs tests via a subagent using `quarkus/callTool`)_
 
 ### Development workflow
 
 The MCP server guides the agent through the optimal Quarkus development workflow:
 
 ```
-1. CREATE           quarkus/create → project scaffolded + auto-started in dev mode
-                    │
-2. SEARCH DOCS      quarkus/searchDocs → look up APIs, config, best practices
-                    │
-3. DISCOVER TOOLS   quarkus/searchTools → find testing, config, endpoint tools
-                    │
-4. DEVELOP          ┌─────────────────────────────────────────────┐
-   (repeat)         │  a) Pause continuous testing                │
-                    │  b) Write code + tests                      │
-                    │  c) Save all files                          │
-                    │  d) Resume continuous testing                │
-                    │     → triggers hot reload + runs tests      │
-                    │  e) Check quarkus/logs for test results     │
-                    │  f) Fix any failures, repeat                │
-                    └─────────────────────────────────────────────┘
-                    │
-5. MONITOR          quarkus/status, quarkus/logs → check app health
+NEW PROJECT                           EXISTING PROJECT
+
+1. quarkus/create                     1. quarkus/update (via subagent)
+   → scaffolds + auto-starts             → checks version, suggests upgrades
+   → generates CLAUDE.md
+                                      2. quarkus/start
+2. quarkus/skills                        → starts dev mode
+   → learn extension patterns
+                                      3. quarkus/skills
+3. quarkus/searchDocs                    → learn extension patterns
+   → look up APIs, config
+                                      4. quarkus/searchDocs
+4. Write code + tests                    → look up APIs, config
+
+5. Run tests (via subagent)           5. Write code + tests
+   → quarkus/callTool
+   → devui-testing_runTests           6. Run tests (via subagent)
+                                         → quarkus/callTool
+6. Iterate                               → devui-testing_runTests
 ```
 
 **Key points:**
 
-- **Hot reload** is automatic in Quarkus dev mode, but is triggered on the next access (HTTP request or test run), not on file save. Resuming continuous testing triggers hot reload.
-- **Pause before editing** — the agent pauses continuous testing before making changes so that tests don't fail on partially-applied code.
-- **Doc search first** — the agent searches Quarkus documentation before writing code to ensure it uses the correct APIs and patterns.
-- **The MCP server survives crashes** — if the app crashes due to a code error, the agent can check `quarkus/logs` to see what went wrong and fix it. The app is still managed and can be restarted.
+- **Hot reload** is automatic in Quarkus dev mode — triggered on the next access (HTTP request or test run), not on file save.
+- **Skills before code** — the agent reads extension-specific skills to learn correct patterns, testing approaches, and common pitfalls before writing any code.
+- **Tests via subagents** — test execution is dispatched to a subagent so the main conversation stays responsive.
+- **The MCP server survives crashes** — if the app crashes due to a code error, the agent can check `quarkus/logs` to see what went wrong and fix it.
+- **CLAUDE.md** — every new project gets a `CLAUDE.md` with Quarkus-specific workflow instructions that guide the agent.
 
 ### What the agent can do with a running app
 
@@ -139,12 +144,18 @@ Once a Quarkus app is running in dev mode, the agent can discover and use all De
 
 | Capability | How to discover | Example |
 |-----------|----------------|---------|
-| Continuous testing | `quarkus/searchTools` query: `test` | Start, stop, pause, resume tests |
+| Testing | `quarkus/searchTools` query: `test` | Run all tests, run a specific test class |
 | Configuration | `quarkus/searchTools` query: `config` | View and change config properties |
 | Extensions | `quarkus/searchTools` query: `extension` | Add or remove extensions at runtime |
 | Endpoints | `quarkus/searchTools` query: `endpoint` | List all REST endpoints and their URLs |
 | Dev Services | `quarkus/searchTools` query: `dev-services` | View database URLs, container info |
 | Log levels | `quarkus/searchTools` query: `log` | Change log levels at runtime |
+
+### Extension skills
+
+The agent can read extension-specific coding skills using `quarkus/skills`. These are read from the `quarkus-extension-skills` JAR, which is automatically downloaded from Maven Central (or a configured mirror) for the project's Quarkus version.
+
+Skills contain patterns, testing guidelines, and common pitfalls for each extension — things like "always use `@Transactional` for write operations with Panache" or "don't create REST clients manually, let CDI inject them."
 
 ### Documentation search
 
@@ -152,12 +163,14 @@ The agent can search Quarkus documentation at any time using `quarkus/searchDocs
 
 On first use, a Docker/Podman container with the pre-indexed documentation is started automatically. If a project directory is provided, the documentation version matches the project's Quarkus version.
 
-**Examples of what to ask:**
+### Update checking
 
-- "Search the docs for how to configure a datasource"
-- "Look up CDI dependency injection"
-- "Find the docs on native image configuration"
-- "How do I write tests in Quarkus?"
+For existing projects, `quarkus/update` checks if the Quarkus version is current and provides a full upgrade report:
+
+- Compares build files against [reference projects](https://github.com/quarkusio/code-with-quarkus-compare)
+- Runs `quarkus update --dry-run` (if CLI available) to preview automated migrations
+- Links to the structural diff between versions
+- Recommends manual actions for changes that automated migration doesn't cover
 
 ## MCP Tools Reference
 
@@ -165,7 +178,19 @@ On first use, a Docker/Podman container with the pre-indexed documentation is st
 
 | Tool | Description | Parameters |
 |------|-------------|------------|
-| `quarkus/create` | Create a new Quarkus app and auto-start it in dev mode | `outputDir` (required), `groupId`, `artifactId`, `extensions`, `buildTool` |
+| `quarkus/create` | Create a new Quarkus app, auto-start in dev mode, generate CLAUDE.md | `outputDir` (required), `groupId`, `artifactId`, `extensions`, `buildTool`, `quarkusVersion` |
+
+### Update Checking
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `quarkus/update` | Check if project is up-to-date, provide upgrade report | `projectDir` (required) |
+
+### Extension Skills
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `quarkus/skills` | Get coding patterns, testing guidelines, and pitfalls for project extensions | `projectDir` (required), `query` |
 
 ### Lifecycle Management
 
@@ -200,17 +225,20 @@ AI Coding Agent (Claude Code, Copilot, Cursor...)
 +------------------------------------------+
 |  Quarkus Agent MCP (always running)      |
 |                                          |
-|  create --- quarkus create app / mvn     |
-|  start/stop/restart --- child process    |
-|  searchTools/callTool -- HTTP proxy      |
+|  create ------- quarkus create app       |
+|  update ------- version check + report   |
+|  skills ------- extension-skills JAR     |
+|  start/stop --- child process            |
+|  searchTools -- HTTP proxy to Dev MCP    |
+|  callTool ----- HTTP proxy to Dev MCP    |
 |  searchDocs --- embeddings + pgvector    |
-+------+--------------+--------------+-----+
-       |              |              |
-       v              v              v
-  quarkus dev    /q/dev-mcp     pgvector
-  (may crash     (running       (Testcontainers,
-   -- Agent MCP   app's Dev      pre-indexed
-   survives)      MCP tools)     Quarkus docs)
++------+---------+---------+----------+----+
+       |         |         |          |
+       v         v         v          v
+  quarkus dev  /q/dev-mcp  pgvector   Maven Central
+  (may crash   (running    (pre-      (extension-
+   -- Agent    app's Dev   indexed    skills JAR)
+   survives)   MCP tools)  docs)
 ```
 
 The MCP server wraps `quarkus dev` as a child process, so it stays alive when the app crashes. This is the key differentiator from the built-in Dev MCP server.
@@ -245,6 +273,8 @@ claude mcp add quarkus-agent -- ./target/quarkus-agent-mcp-1.0.0-SNAPSHOT-runner
 ## Related Projects
 
 - [Quarkus Dev MCP](https://github.com/quarkusio/quarkus) — Built-in MCP server inside running Quarkus apps
+- [quarkus-skills](https://github.com/quarkusio/quarkus-skills) — Standalone skill files for Quarkus (Agent Skills specification)
+- [code-with-quarkus-compare](https://github.com/quarkusio/code-with-quarkus-compare) — Reference projects for build file comparison
 - [chappie-docling-rag](https://github.com/chappie-bot/chappie-docling-rag) — Builds the pgvector Docker images with pre-indexed Quarkus docs
 - [quarkus-mcp-server](https://github.com/quarkiverse/quarkus-mcp-server) — Quarkiverse MCP Server extension used by this project
 

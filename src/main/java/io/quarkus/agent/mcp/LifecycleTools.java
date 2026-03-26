@@ -25,16 +25,8 @@ public class LifecycleTools {
     ObjectMapper mapper;
 
     @Tool(name = "quarkus/start", description = "Start a Quarkus application in dev mode. "
-            + "Auto-detects Maven or Gradle and uses the wrapper script if available. "
-            + "Once running, Quarkus dev mode provides hot reload — changes are recompiled when the "
-            + "app is next accessed (e.g., via an HTTP request or when tests run). "
-            + "DEVELOPMENT WORKFLOW: After starting, use quarkus/searchTools with query 'test' "
-            + "to find continuous testing tools. Follow this cycle: "
-            + "1) Pause continuous testing before making code changes, "
-            + "2) Make and save all your code changes, "
-            + "3) Resume continuous testing — this triggers hot reload and runs tests, "
-            + "4) Check quarkus/logs for test results. "
-            + "TIP: Use quarkus/searchDocs to look up Quarkus APIs and best practices before writing code.")
+            + "Auto-detects Maven or Gradle. Hot reload is triggered when the app is accessed. "
+            + "RULES: Always write tests. Always keep README.md updated after changes.")
     ToolResponse start(
             @ToolArg(description = "Absolute path to the Quarkus project directory") String projectDir,
             @ToolArg(description = "Build tool to use: 'maven' or 'gradle' (auto-detected if omitted)", required = false) String buildTool) {
@@ -59,11 +51,7 @@ public class LifecycleTools {
     }
 
     @Tool(name = "quarkus/restart", description = "Force restart a Quarkus application. "
-            + "Sends 's' to the dev mode console for a full restart. "
-            + "If the process has died, spawns a new one. "
-            + "NOTE: You usually do NOT need to call this — Quarkus dev mode hot-reloads "
-            + "automatically when you save file changes. Only use restart if hot reload fails "
-            + "or the app is in a bad state.")
+            + "Only use if the app is unresponsive. Normally hot reload handles changes automatically.")
     ToolResponse restart(
             @ToolArg(description = "Absolute path to the Quarkus project directory") String projectDir) {
         try {
@@ -75,10 +63,7 @@ public class LifecycleTools {
     }
 
     @Tool(name = "quarkus/status", description = "Get the status of a Quarkus application. "
-            + "Returns: not_started, starting, running (with port), crashed, or stopped. "
-            + "When running, use quarkus/searchTools to discover available Dev MCP tools "
-            + "(testing, config, endpoints, dev services, extensions, etc.). "
-            + "Use quarkus/searchDocs to look up Quarkus APIs and best practices before writing code.")
+            + "Returns: not_started, starting, running (with port), crashed, or stopped.")
     ToolResponse status(
             @ToolArg(description = "Absolute path to the Quarkus project directory") String projectDir) {
         try {

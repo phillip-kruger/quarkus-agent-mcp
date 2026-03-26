@@ -40,25 +40,9 @@ public class DevMcpProxyTools {
     @Inject
     ObjectMapper mapper;
 
-    @Tool(name = "quarkus/searchTools", description = "Search available tools on a running Quarkus application's Dev MCP server. "
-            + "Use this to discover what actions you can perform on the running app. "
-            + "Available tools typically include: continuous testing (start/stop/pause/resume), "
-            + "configuration management, extension add/remove, log level control, "
-            + "dev services info, workspace file operations, and endpoint listing. "
-            + "IMPORTANT: Always use this tool to discover available Dev MCP tools before "
-            + "interacting with the running app. This includes when you need to: "
-            + "run or manage tests, check or change configuration, add/remove extensions, "
-            + "list endpoints (to know what URLs to test), view dev services (database URLs, etc.), "
-            + "or perform any other action on the running app. "
-            + "Call this tool first to discover the tool name and parameters, "
-            + "then use quarkus/callTool to invoke it. "
-            + "DEVELOPMENT WORKFLOW for continuous testing: "
-            + "1) Search for 'test' tools to find pause/resume/start testing tools, "
-            + "2) PAUSE continuous testing before making code changes, "
-            + "3) Make and save ALL your code changes, "
-            + "4) RESUME continuous testing — this triggers hot reload and runs tests against updated code, "
-            + "5) Check quarkus/logs for test results. "
-            + "This prevents test failures from partially-applied changes.")
+    @Tool(name = "quarkus/searchTools", description = "Discover available tools on the running Quarkus app's Dev MCP server. "
+            + "Use this before interacting with the running app — for testing, config, extensions, "
+            + "endpoints, dev services, etc. Then use quarkus/callTool to invoke the discovered tool.")
     ToolResponse searchTools(
             @ToolArg(description = "Absolute path to the Quarkus project directory") String projectDir,
             @ToolArg(description = "Search query to filter tools by name or description (case-insensitive). "
@@ -84,12 +68,111 @@ public class DevMcpProxyTools {
         }
     }
 
-    @Tool(name = "quarkus/callTool", description = "Call a tool on the running Quarkus application's Dev MCP server. "
-            + "Use quarkus/searchTools first to discover available tool names and their required arguments, "
-            + "then use this tool to invoke them. "
-            + "Examples: toolName='devui-continuous-testing_start' to start continuous testing, "
-            + "'devui-continuous-testing_pause' to pause before making changes, "
-            + "'devui-continuous-testing_resume' to resume after changes are saved.")
+    private static final long BUILD_POLL_INTERVAL_MS = 3000;
+    private static final long BUILD_WAIT_TIMEOUT_MS = 120000;
+
+    @Tool(name = "quarkus/skills", description = "Get coding skills, patterns, testing guidelines, and configuration reference "
+            + "for the Quarkus extensions used in the project. "
+            + "ALWAYS call this BEFORE writing code or tests to learn the correct Quarkus patterns for each extension. "
+            + "Does NOT require the app to be running — reads from built extension JARs. "
+            + "If the app is still building (just created), this will wait for the build to complete.")
+    ToolResponse skills(
+            @ToolArg(description = "Absolute path to the Quarkus project directory") String projectDir,
+            @ToolArg(description = "Optional query to filter skills by extension name (case-insensitive). "
+                    + "Examples: 'panache', 'rest', 'security', 'kafka'. "
+                    + "If omitted, lists all available skills with their descriptions.", required = false) String query) {
+        try {
+            List<SkillReader.SkillInfo> skills = SkillReader.readSkills(projectDir);
+
+            // If no skills found, check if the app is still building and wait for it
+            if (skills.isEmpty()) {
+                skills = waitForBuildAndRetry(projectDir);
+            }
+
+            if (skills.isEmpty()) {
+                return ToolResponse.success(
+                        "No extension skills found. Ensure the project has been built at least once "
+                                + "and uses Quarkus extensions that provide skill files.");
+            }
+
+            String queryLower = (query != null && !query.isBlank()) ? query.toLowerCase() : null;
+
+            // Filter by query if provided
+            List<SkillReader.SkillInfo> matched = skills;
+            if (queryLower != null) {
+                matched = skills.stream()
+                        .filter(s -> s.name().toLowerCase().contains(queryLower)
+                                || (s.description() != null && s.description().toLowerCase().contains(queryLower)))
+                        .toList();
+            }
+
+            if (matched.isEmpty()) {
+                return ToolResponse.success("No skills found matching: " + query);
+            }
+
+            // If query matched or only one skill, return full content
+            if (queryLower != null || matched.size() == 1) {
+                StringBuilder sb = new StringBuilder();
+                for (SkillReader.SkillInfo skill : matched) {
+                    if (!sb.isEmpty()) {
+                        sb.append("\n---\n\n");
+                    }
+                    sb.append("# ").append(skill.name()).append("\n\n");
+                    sb.append(skill.content());
+                }
+                return ToolResponse.success(sb.toString());
+            }
+
+            // Multiple skills and no query — return summary list
+            StringBuilder sb = new StringBuilder();
+            sb.append("Available extension skills (use query parameter to read a specific skill):\n\n");
+            for (SkillReader.SkillInfo skill : matched) {
+                sb.append("- **").append(skill.name()).append("**");
+                if (skill.description() != null) {
+                    sb.append(": ").append(skill.description());
+                }
+                sb.append("\n");
+            }
+            return ToolResponse.success(sb.toString());
+        } catch (Exception e) {
+            return ToolResponse.error("Failed to read skills: " + e.getMessage());
+        }
+    }
+
+    /**
+     * If the app is still building (STARTING state), wait for it to reach RUNNING
+     * so that deployment JARs are available in the local Maven repository, then retry.
+     */
+    private List<SkillReader.SkillInfo> waitForBuildAndRetry(String projectDir) {
+        QuarkusInstance instance = processManager.getInstance(projectDir);
+        if (instance == null || instance.getStatus() != QuarkusInstance.Status.STARTING) {
+            return List.of();
+        }
+
+        long deadline = System.currentTimeMillis() + BUILD_WAIT_TIMEOUT_MS;
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(BUILD_POLL_INTERVAL_MS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return List.of();
+            }
+
+            QuarkusInstance.Status status = instance.getStatus();
+            if (status == QuarkusInstance.Status.RUNNING) {
+                return SkillReader.readSkills(projectDir);
+            }
+            if (status == QuarkusInstance.Status.CRASHED || status == QuarkusInstance.Status.STOPPED) {
+                return List.of();
+            }
+        }
+        // Timeout — try one last time in case JARs appeared
+        return SkillReader.readSkills(projectDir);
+    }
+
+    @Tool(name = "quarkus/callTool", description = "Invoke a Dev MCP tool by name on the running Quarkus app. "
+            + "Use quarkus/searchTools first to discover tool names and parameters. "
+            + "After structural changes (adding extensions, endpoints), update README.md.")
     ToolResponse callTool(
             @ToolArg(description = "Absolute path to the Quarkus project directory") String projectDir,
             @ToolArg(description = "The name of the Dev MCP tool to call (as returned by quarkus/searchTools)") String toolName,
@@ -107,7 +190,19 @@ public class DevMcpProxyTools {
             }
 
             JsonNode response = callDevMcp(port, "tools/call", params);
-            return extractToolResult(response);
+            ToolResponse result = extractToolResult(response);
+
+            // Remind agent to update README after structural changes
+            if (!result.isError() && toolName != null
+                    && (toolName.contains("extension") || toolName.contains("add")
+                            || toolName.contains("remove"))) {
+                String resultText = extractTextFromResult(result);
+                return ToolResponse.success(resultText
+                        + "\n\nREMINDER: Update README.md to reflect this change (features, extensions, guide links)."
+                        + "\nAlso write tests for any new functionality.");
+            }
+
+            return result;
         } catch (Exception e) {
             return ToolResponse.error(e.getMessage());
         }
@@ -163,6 +258,22 @@ public class DevMcpProxyTools {
             return ToolResponse.success(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(response));
         }
         return ToolResponse.error("No response from Dev MCP");
+    }
+
+    private String extractTextFromResult(ToolResponse result) {
+        if (result.content() != null && !result.content().isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            for (var c : result.content()) {
+                if (c.type() == io.quarkiverse.mcp.server.Content.Type.TEXT) {
+                    if (!sb.isEmpty()) {
+                        sb.append("\n");
+                    }
+                    sb.append(c.asText().text());
+                }
+            }
+            return sb.toString();
+        }
+        return "";
     }
 
     private JsonNode fetchDevMcpTools(int port) {

@@ -157,7 +157,8 @@ public class QuarkusProcessManager {
         } else {
             mvnCmd = "mvn";
         }
-        return new ProcessBuilder(mvnCmd, "quarkus:dev", "-Dquarkus.console.basic=true");
+        return new ProcessBuilder(mvnCmd, "quarkus:dev", "-Dquarkus.console.basic=true",
+                "-Dquarkus.dev-mcp.enabled=true");
     }
 
     private ProcessBuilder createGradleProcessBuilder(File projectDir) {
@@ -169,7 +170,8 @@ public class QuarkusProcessManager {
         } else {
             gradleCmd = "gradle";
         }
-        return new ProcessBuilder(gradleCmd, "quarkusDev", "-Dquarkus.console.basic=true");
+        return new ProcessBuilder(gradleCmd, "quarkusDev", "-Dquarkus.console.basic=true",
+                "-Dquarkus.dev-mcp.enabled=true");
     }
 
     /**

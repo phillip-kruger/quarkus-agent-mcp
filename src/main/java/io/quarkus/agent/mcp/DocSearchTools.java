@@ -90,14 +90,9 @@ public class DocSearchTools {
 
     private final ConcurrentHashMap<String, PgVectorEmbeddingStore> embeddingStores = new ConcurrentHashMap<>();
 
-    @Tool(name = "quarkus/searchDocs", description = "Search the Quarkus documentation using semantic search. "
-            + "Returns relevant documentation chunks matching the query. "
-            + "IMPORTANT: Always search the documentation BEFORE writing Quarkus code. "
-            + "Use this to look up the correct APIs, annotations, configuration properties, "
-            + "and best practices for any Quarkus feature (REST endpoints, CDI, Hibernate, "
-            + "security, testing, native builds, etc.). "
-            + "The first call may take a moment to start the documentation database. "
-            + "If a projectDir is provided, the documentation version will match the project's Quarkus version.")
+    @Tool(name = "quarkus/searchDocs", description = "Search Quarkus documentation. "
+            + "Always use this BEFORE writing Quarkus code to look up correct APIs, annotations, "
+            + "configuration, and best practices. First call may take a moment to start the doc database.")
     ToolResponse searchDocs(
             @ToolArg(description = "The search query describing what documentation you're looking for. "
                     + "Examples: 'how to configure datasource', 'CDI dependency injection', "
