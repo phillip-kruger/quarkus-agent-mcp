@@ -48,7 +48,7 @@ public class CreateTools {
             + "quarkus-smallrye-openapi for API docs, quarkus-smallrye-health for health checks). "
             + "Use quarkus/searchDocs or quarkus/searchTools query='extension' to find extensions. "
             + "2) Use quarkus/skills and quarkus/searchDocs BEFORE writing any code. "
-            + "3) ALWAYS write tests for every feature — no exceptions. "
+            + "3) ALWAYS write tests for every feature if it makes sense and unless the user explicitly requested you not to. "
             + "4) Keep README.md updated with app description, features, endpoints, and Quarkus guide links after every change.")
     ToolResponse create(
             @ToolArg(description = "Absolute path to the directory where the project will be created. "
