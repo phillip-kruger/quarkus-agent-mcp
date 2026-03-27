@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 import jakarta.inject.Inject;
 
@@ -33,6 +34,8 @@ public class DevMcpProxyTools {
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
             .connectTimeout(CONNECT_TIMEOUT)
             .build();
+
+    private static final AtomicLong REQUEST_ID = new AtomicLong(0);
 
     @Inject
     QuarkusProcessManager processManager;
@@ -288,7 +291,7 @@ public class DevMcpProxyTools {
         try {
             String jsonRpcRequest = mapper.writeValueAsString(Map.of(
                     "jsonrpc", "2.0",
-                    "id", 1,
+                    "id", REQUEST_ID.incrementAndGet(),
                     "method", method,
                     "params", params));
 
