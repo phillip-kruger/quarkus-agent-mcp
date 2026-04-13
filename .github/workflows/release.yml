@@ -18,6 +18,11 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
           cache: 'maven'
+          server-id: ossrh
+          server-username: SONATYPE_USERNAME
+          server-password: SONATYPE_PASSWORD
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase: GPG_PASSPHRASE
 
       - name: Set version from tag
         run: |
@@ -29,38 +34,38 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           ./mvnw versions:set -DnewVersion=$VERSION -DgenerateBackupPoms=false
 
-      - name: Build JVM uber-jar
-        run: ./mvnw package -DskipTests -Dquarkus.package.jar.type=uber-jar
-
-      - name: Rename artifacts
-        run: |
-          mv target/quarkus-agent-mcp-${VERSION}-runner.jar target/quarkus-agent-mcp-${VERSION}.jar
+      - name: Deploy to Maven Central
+        run: ./mvnw deploy -Prelease -DskipTests
+        env:
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
-            target/quarkus-agent-mcp-${{ env.VERSION }}.jar
+            target/quarkus-agent-mcp-${{ env.VERSION }}-runner.jar
 
-      - name: Update JBang catalog
+      - name: Update version in JBang catalog and plugin manifest
         run: |
-          cat > jbang-catalog.json << 'CATALOG_EOF'
+          cat > jbang-catalog.json << CATALOG_EOF
           {
             "aliases": {
               "quarkus-agent-mcp": {
-                "script-ref": "https://github.com/quarkusio/quarkus-agent-mcp/releases/download/v${VERSION}/quarkus-agent-mcp-${VERSION}.jar",
+                "script-ref": "io.quarkus:quarkus-agent-mcp:${VERSION}:runner",
                 "description": "Standalone MCP server for AI coding agents to manage Quarkus applications",
                 "java-version": "21+"
               }
             }
           }
           CATALOG_EOF
-          sed -i "s/\${VERSION}/${VERSION}/g" jbang-catalog.json
+          jq --arg v "$VERSION" '.version = $v' .claude-plugin/plugin.json > tmp.json && mv tmp.json .claude-plugin/plugin.json
 
-      - name: Commit updated JBang catalog
+      - name: Commit updated JBang catalog and plugin manifest
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "Update JBang catalog for v${{ env.VERSION }}"
-          file_pattern: jbang-catalog.json
+          commit_message: "chore: update versions for v${{ env.VERSION }}"
+          file_pattern: jbang-catalog.json .claude-plugin/plugin.json
           branch: main
