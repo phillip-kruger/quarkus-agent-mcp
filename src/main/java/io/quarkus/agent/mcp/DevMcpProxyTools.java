@@ -41,6 +41,12 @@ public class DevMcpProxyTools {
 
     private static final AtomicLong REQUEST_ID = new AtomicLong(0);
 
+    // --- Startup / build polling ---
+    private static final int STARTUP_WAIT_SECONDS = 120;
+    private static final int POLL_INTERVAL_MS = 1000;
+    private static final long BUILD_POLL_INTERVAL_MS = 3000;
+    private static final long BUILD_WAIT_TIMEOUT_MS = 120000;
+
     @Inject
     QuarkusProcessManager processManager;
 
@@ -77,9 +83,6 @@ public class DevMcpProxyTools {
             return ToolResponse.error(e.getMessage());
         }
     }
-
-    private static final long BUILD_POLL_INTERVAL_MS = 3000;
-    private static final long BUILD_WAIT_TIMEOUT_MS = 120000;
 
     @Tool(name = "quarkus/skills", description = "Get coding skills, patterns, testing guidelines, and configuration reference "
             + "for the Quarkus extensions used in the project. "
@@ -162,24 +165,11 @@ public class DevMcpProxyTools {
             return List.of();
         }
 
-        long deadline = System.currentTimeMillis() + BUILD_WAIT_TIMEOUT_MS;
-        while (System.currentTimeMillis() < deadline) {
-            try {
-                Thread.sleep(BUILD_POLL_INTERVAL_MS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return List.of();
-            }
-
-            QuarkusInstance.Status status = instance.getStatus();
-            if (status == QuarkusInstance.Status.RUNNING) {
-                return SkillReader.readSkills(projectDir, localSkillsDir.map(Path::of).orElse(null));
-            }
-            if (status == QuarkusInstance.Status.CRASHED || status == QuarkusInstance.Status.STOPPED) {
-                return List.of();
-            }
+        QuarkusInstance.Status status = awaitStartup(instance, BUILD_WAIT_TIMEOUT_MS, BUILD_POLL_INTERVAL_MS);
+        if (status == QuarkusInstance.Status.CRASHED || status == QuarkusInstance.Status.STOPPED) {
+            return List.of();
         }
-        // Timeout — try one last time in case JARs appeared
+        // RUNNING or timed out (still STARTING) — try reading skills either way
         return SkillReader.readSkills(projectDir, localSkillsDir.map(Path::of).orElse(null));
     }
 
@@ -221,9 +211,6 @@ public class DevMcpProxyTools {
         }
     }
 
-    private static final int STARTUP_WAIT_SECONDS = 120;
-    private static final int POLL_INTERVAL_MS = 1000;
-
     private int resolvePort(String projectDir) {
         QuarkusInstance instance = processManager.getInstance(projectDir);
         if (instance == null) {
@@ -233,15 +220,9 @@ public class DevMcpProxyTools {
 
         // If the app is still starting, wait for it to become ready
         if (instance.getStatus() == QuarkusInstance.Status.STARTING) {
-            long deadline = System.currentTimeMillis() + STARTUP_WAIT_SECONDS * 1000L;
-            while (instance.getStatus() == QuarkusInstance.Status.STARTING
-                    && System.currentTimeMillis() < deadline) {
-                try {
-                    Thread.sleep(POLL_INTERVAL_MS);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new IllegalStateException("Interrupted while waiting for Quarkus to start.");
-                }
+            QuarkusInstance.Status status = awaitStartup(instance, STARTUP_WAIT_SECONDS * 1000L, POLL_INTERVAL_MS);
+            if (status == null) {
+                throw new IllegalStateException("Interrupted while waiting for Quarkus to start.");
             }
         }
 
@@ -256,6 +237,24 @@ public class DevMcpProxyTools {
             throw new IllegalStateException("Could not detect HTTP port for the running Quarkus application.");
         }
         return port;
+    }
+
+    /**
+     * Polls the instance status until it leaves STARTING or the deadline expires.
+     * Returns the final observed status, or null if interrupted.
+     */
+    private QuarkusInstance.Status awaitStartup(QuarkusInstance instance, long timeoutMs, long pollIntervalMs) {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (instance.getStatus() == QuarkusInstance.Status.STARTING
+                && System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(pollIntervalMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return null;
+            }
+        }
+        return instance.getStatus();
     }
 
     private List<JsonNode> filterTools(JsonNode tools, String query) {

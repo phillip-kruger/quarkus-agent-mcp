@@ -130,7 +130,7 @@ public class CreateTools {
             createSourceDirectories(projectDir);
 
             // Generate AGENTS.md with Quarkus-specific instructions (and CLAUDE.md pointing to it)
-            generateClaudeMd(projectDir, extensions);
+            generateProjectInstructions(projectDir, extensions);
 
             // Auto-start the app in dev mode
             try {
@@ -325,15 +325,25 @@ public class CreateTools {
 
     private void addRestAssuredIfMissing(String projectDir) {
         Path pomPath = Path.of(projectDir, "pom.xml");
-        if (!Files.exists(pomPath)) {
-            return;
+        Path gradleKtsPath = Path.of(projectDir, "build.gradle.kts");
+        Path gradlePath = Path.of(projectDir, "build.gradle");
+
+        if (Files.exists(pomPath)) {
+            addRestAssuredToMaven(pomPath);
+        } else if (Files.exists(gradleKtsPath)) {
+            addRestAssuredToGradle(gradleKtsPath, "testImplementation(\"io.rest-assured:rest-assured\")");
+        } else if (Files.exists(gradlePath)) {
+            addRestAssuredToGradle(gradlePath, "testImplementation 'io.rest-assured:rest-assured'");
         }
+    }
+
+    // Safe for freshly-generated POMs from Quarkus CLI where the structure is predictable.
+    private void addRestAssuredToMaven(Path pomPath) {
         try {
             String pom = Files.readString(pomPath, StandardCharsets.UTF_8);
             if (pom.contains("rest-assured")) {
                 return;
             }
-            // Insert rest-assured dependency before </dependencies>
             String restAssuredDep = """
                         <dependency>
                             <groupId>io.rest-assured</groupId>
@@ -352,7 +362,48 @@ public class CreateTools {
         }
     }
 
-    private void generateClaudeMd(String projectDir, String extensions) {
+    private void addRestAssuredToGradle(Path buildFile, String dependency) {
+        try {
+            String content = Files.readString(buildFile, StandardCharsets.UTF_8);
+            if (content.contains("rest-assured")) {
+                return;
+            }
+            int depsStart = content.indexOf("dependencies");
+            if (depsStart < 0) {
+                return;
+            }
+            int braceStart = content.indexOf('{', depsStart);
+            if (braceStart < 0) {
+                return;
+            }
+            // Find the matching closing brace (safe for freshly-generated Quarkus projects)
+            int depth = 0;
+            int closingBrace = -1;
+            for (int i = braceStart; i < content.length(); i++) {
+                if (content.charAt(i) == '{') {
+                    depth++;
+                } else if (content.charAt(i) == '}') {
+                    depth--;
+                    if (depth == 0) {
+                        closingBrace = i;
+                        break;
+                    }
+                }
+            }
+            if (closingBrace < 0) {
+                return;
+            }
+            content = content.substring(0, closingBrace)
+                    + "    " + dependency + "\n"
+                    + content.substring(closingBrace);
+            Files.writeString(buildFile, content, StandardCharsets.UTF_8);
+            LOG.debugf("Added rest-assured test dependency to %s", buildFile);
+        } catch (IOException e) {
+            LOG.debugf("Failed to add rest-assured dependency: %s", e.getMessage());
+        }
+    }
+
+    private void generateProjectInstructions(String projectDir, String extensions) {
         try {
             String agentsMdContent = """
                     # AGENTS.md — Quarkus Project Instructions
