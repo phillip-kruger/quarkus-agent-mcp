@@ -305,6 +305,18 @@ Then reference the native binary in your MCP config:
 claude mcp add quarkus-agent -- ./target/quarkus-agent-mcp-*-runner
 ```
 
+## Presentation
+
+An HTML slide deck is available in the `presentation/` directory for team demos and talks.
+
+```bash
+# Open directly in a browser
+xdg-open presentation/index.html   # Linux
+open presentation/index.html        # macOS
+```
+
+Press **F** for fullscreen, arrow keys or space to navigate slides.
+
 ## Related Projects
 
 - [Quarkus Dev MCP](https://github.com/quarkusio/quarkus) — Built-in MCP server inside running Quarkus apps
