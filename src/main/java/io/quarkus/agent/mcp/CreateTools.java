@@ -9,10 +9,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.regex.Pattern;
 
 import jakarta.inject.Inject;
 
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
 import io.quarkiverse.mcp.server.Tool;
@@ -33,6 +35,10 @@ public class CreateTools {
     @Inject
     QuarkusProcessManager processManager;
 
+    @Inject
+    @ConfigProperty(name = "agent-mcp.default-quarkus-version")
+    Optional<String> defaultQuarkusVersion;
+
     // Maven coordinate segments: letters, digits, dots, hyphens, underscores
     private static final Pattern VALID_MAVEN_ID = Pattern.compile("^[a-zA-Z0-9._-]+$");
 
@@ -44,12 +50,15 @@ public class CreateTools {
 
     @Tool(name = "quarkus/create", description = "Create a new Quarkus application and auto-start it in dev mode. "
             + "RULES: 1) NEVER implement features manually when a Quarkus extension exists — "
-            + "always search for and add the right extension first (e.g. use quarkus-qute for templating, "
-            + "quarkus-smallrye-openapi for API docs, quarkus-smallrye-health for health checks). "
-            + "Use quarkus/searchDocs or quarkus/searchTools query='extension' to find extensions. "
-            + "2) Use quarkus/skills and quarkus/searchDocs BEFORE writing any code. "
-            + "3) ALWAYS write tests for every feature if it makes sense and unless the user explicitly requested you not to. "
-            + "4) Keep README.md updated with app description, features, endpoints, and Quarkus guide links after every change.")
+            + "always search for and add the right extension first. "
+            + "2) BEFORE creating the app or writing ANY code, present the user with extension choices for each capability. "
+            + "When multiple extensions can fulfill a capability (e.g. REST: quarkus-rest vs resteasy-classic vs spring-web; "
+            + "Web UI: Qute vs Web Bundler vs Quinoa vs Web Dependency Locator; "
+            + "Persistence: Hibernate ORM with Panache vs Hibernate Reactive vs JDBC), "
+            + "list ALL options with a recommended default and WAIT for the user to choose. NEVER silently pick one. "
+            + "3) Use quarkus/skills for each chosen extension BEFORE writing any code — this is mandatory, not optional. "
+            + "4) ALWAYS write tests for every feature if it makes sense and unless the user explicitly requested you not to. "
+            + "5) Keep README.md updated with app description, features, endpoints, and Quarkus guide links after every change.")
     ToolResponse create(
             @ToolArg(description = "Absolute path to the directory where the project will be created. "
                     + "A subdirectory named after the artifactId will be created inside this directory.") String outputDir,
@@ -73,7 +82,12 @@ public class CreateTools {
             if (extensions != null && !extensions.isBlank() && !VALID_EXTENSIONS.matcher(extensions).matches()) {
                 return ToolResponse.error("Invalid extensions: must contain only letters, digits, dots, hyphens, commas, colons.");
             }
-            if (quarkusVersion != null && !quarkusVersion.isBlank() && !VALID_MAVEN_ID.matcher(quarkusVersion).matches()) {
+            // Resolve version: explicit parameter > config property > latest (null)
+            String resolvedVersion = (quarkusVersion != null && !quarkusVersion.isBlank())
+                    ? quarkusVersion
+                    : defaultQuarkusVersion.filter(v -> !v.isBlank()).orElse(null);
+
+            if (resolvedVersion != null && !VALID_MAVEN_ID.matcher(resolvedVersion).matches()) {
                 return ToolResponse.error("Invalid quarkusVersion: must contain only letters, digits, dots, hyphens, underscores.");
             }
 
@@ -83,7 +97,7 @@ public class CreateTools {
             }
 
             List<String> command = buildCommand(outDir, resolvedGroupId, resolvedArtifactId, extensions, buildTool,
-                    quarkusVersion);
+                    resolvedVersion);
             LOG.infof("Creating Quarkus app: %s", String.join(" ", command));
 
             ProcessBuilder pb = new ProcessBuilder(command)
@@ -106,7 +120,16 @@ public class CreateTools {
 
             String projectDir = new File(outDir, resolvedArtifactId).getAbsolutePath();
 
-            // Generate CLAUDE.md with Quarkus-specific instructions
+            // Ensure rest-assured is available for testing (--no-code skips it)
+            addRestAssuredIfMissing(projectDir);
+
+            // Ensure source directories exist so dev mode watches them from the start.
+            // --no-code creates an empty project; if src/test/java doesn't exist when
+            // dev mode starts, the file watcher never registers it and tests added later
+            // won't be discovered without a full restart.
+            createSourceDirectories(projectDir);
+
+            // Generate AGENTS.md with Quarkus-specific instructions (and CLAUDE.md pointing to it)
             generateClaudeMd(projectDir, extensions);
 
             // Auto-start the app in dev mode
@@ -114,21 +137,25 @@ public class CreateTools {
                 processManager.start(projectDir, buildTool);
                 LOG.infof("Auto-started Quarkus app at: %s", projectDir);
                 return ToolResponse.success("Quarkus project created and starting in dev mode at: " + projectDir
-                        + "\n\nNEXT STEPS:"
-                        + "\n1. Before implementing ANY feature, search for a Quarkus extension that provides it. "
-                        + "Use quarkus/searchDocs to find extensions. NEVER roll your own solution when an extension exists "
-                        + "(e.g. use quarkus-qute for templates, quarkus-smallrye-health for health checks, "
-                        + "quarkus-smallrye-openapi for API docs, quarkus-mailer for email). "
-                        + "Add extensions via quarkus/searchTools query='extension' → quarkus/callTool."
-                        + "\n2. Use quarkus/skills to learn the correct patterns, testing approaches, and configuration for each extension."
-                        + "\n3. Use quarkus/searchDocs to look up additional Quarkus APIs and best practices."
-                        + "\n4. Write your code AND tests. Always include tests for every feature."
-                        + "\n5. Run tests with quarkus/callTool: use 'devui-testing_runTests' to run all tests, "
+                        + "\n\nNEXT STEPS (follow this order strictly):"
+                        + "\n1. STOP — do NOT write any code yet. For each capability the user requested, "
+                        + "search for Quarkus extensions that provide it using quarkus/searchDocs. "
+                        + "NEVER roll your own solution when an extension exists."
+                        + "\n2. PRESENT OPTIONS — when multiple extensions can fulfill a capability, "
+                        + "list ALL options to the user with a recommended default marked. "
+                        + "Wait for the user to choose before proceeding. Never silently pick one."
+                        + "\n3. LOAD SKILLS — call quarkus/skills for each chosen extension BEFORE writing any code. "
+                        + "This is mandatory, not optional."
+                        + "\n4. Add chosen extensions via quarkus/searchTools query='extension' → quarkus/callTool."
+                        + "\n5. Use quarkus/searchDocs to look up additional Quarkus APIs and best practices."
+                        + "\n6. Write your code AND tests. Always include tests for every feature."
+                        + "\n7. Run tests with quarkus/callTool: use 'devui-testing_runTests' to run all tests, "
                         + "'devui-testing_runAffectedTests' to run only tests affected by your changes, "
                         + "or 'devui-testing_runTest' with arguments {\"className\":\"com.example.MyTest\"} for a specific test."
-                        + "\n6. Hot reload is triggered when tests run — do NOT restart the app."
-                        + "\n7. Update README.md with: app description, features, endpoints, how to run, and links to Quarkus guides."
-                        + "\n8. After core features work, suggest to the user: security, observability, health checks, OpenAPI.");
+                        + "\n8. After code changes, trigger a reload via quarkus/callTool with toolName 'devui-logstream_forceRestart'. Do NOT restart the app manually."
+                        + "\n   IMPORTANT: After pom.xml/build.gradle changes (adding dependencies or extensions), you MUST do a full quarkus/stop + quarkus/start. forceRestart only recompiles source — it does NOT re-resolve dependencies."
+                        + "\n9. Update README.md with: app description, features, endpoints, how to run, and links to Quarkus guides."
+                        + "\n10. After core features work, suggest to the user: security, observability, health checks, OpenAPI.");
             } catch (Exception startError) {
                 LOG.warnf("Project created but failed to auto-start: %s", startError.getMessage());
                 return ToolResponse.success("Quarkus project created at: " + projectDir
@@ -283,25 +310,85 @@ public class CreateTools {
         }
     }
 
+    private void createSourceDirectories(String projectDir) {
+        Path base = Path.of(projectDir);
+        try {
+            Files.createDirectories(base.resolve("src/main/java"));
+            Files.createDirectories(base.resolve("src/main/resources"));
+            Files.createDirectories(base.resolve("src/test/java"));
+            Files.createDirectories(base.resolve("src/test/resources"));
+            LOG.debugf("Ensured source directories exist in %s", projectDir);
+        } catch (IOException e) {
+            LOG.debugf("Failed to create source directories: %s", e.getMessage());
+        }
+    }
+
+    private void addRestAssuredIfMissing(String projectDir) {
+        Path pomPath = Path.of(projectDir, "pom.xml");
+        if (!Files.exists(pomPath)) {
+            return;
+        }
+        try {
+            String pom = Files.readString(pomPath, StandardCharsets.UTF_8);
+            if (pom.contains("rest-assured")) {
+                return;
+            }
+            // Insert rest-assured dependency before </dependencies>
+            String restAssuredDep = """
+                        <dependency>
+                            <groupId>io.rest-assured</groupId>
+                            <artifactId>rest-assured</artifactId>
+                            <scope>test</scope>
+                        </dependency>
+                    """;
+            int insertPoint = pom.lastIndexOf("</dependencies>");
+            if (insertPoint > 0) {
+                pom = pom.substring(0, insertPoint) + restAssuredDep + pom.substring(insertPoint);
+                Files.writeString(pomPath, pom, StandardCharsets.UTF_8);
+                LOG.debugf("Added rest-assured test dependency to %s", pomPath);
+            }
+        } catch (IOException e) {
+            LOG.debugf("Failed to add rest-assured dependency: %s", e.getMessage());
+        }
+    }
+
     private void generateClaudeMd(String projectDir, String extensions) {
         try {
-            String content = """
-                    # CLAUDE.md — Quarkus Project Instructions
+            String agentsMdContent = """
+                    # AGENTS.md — Quarkus Project Instructions
 
                     This is a Quarkus application. Follow these rules when working on this project.
+
+                    ## CRITICAL — Extension-First Rule (NEVER skip this)
+
+                    **STOP before writing ANY code.** For every feature or capability the user requests:
+
+                    1. **Search for Quarkus extensions** that provide the capability using `quarkus/searchDocs` and `quarkus/searchTools query='extension'`.
+                    2. **Present ALL matching options to the user** with a recommended default marked. Examples:
+                       - User asks for REST → present: **quarkus-rest** (recommended), resteasy-classic, spring-web
+                       - User asks for web UI → present: **Qute** (recommended), Web Bundler, Quinoa, Web Dependency Locator
+                       - User asks for persistence → present: **Hibernate ORM with Panache** (recommended), Hibernate Reactive, JDBC directly
+                       - User asks for security → present: **OIDC** (recommended), Security JDBC, Security JPA, Security Properties
+                    3. **Wait for the user to choose** before proceeding. Do NOT silently pick an extension.
+                    4. **Load skills** with `quarkus/skills` for the chosen extension BEFORE writing any code.
+
+                    Skipping any of these steps is a violation. NEVER implement a feature by hand-coding HTML, JavaScript, REST endpoints, or other functionality when a Quarkus extension exists for it.
 
                     ## Required Workflow
 
                     1. **Use quarkus/update (via subagent) when returning to this project** — checks if the Quarkus version is up-to-date and suggests upgrades.
-                    2. **Use quarkus/skills BEFORE writing any code or tests** — it contains extension-specific patterns, testing approaches, and common pitfalls that prevent mistakes.
+                    2. **Use quarkus/skills BEFORE writing any code or tests** — it contains extension-specific patterns, testing approaches, and common pitfalls that prevent mistakes. Call this EVERY time you are about to add or modify a feature, not just at project creation.
                     3. **Use quarkus/searchDocs for Quarkus documentation** — do NOT use generic documentation tools (Context7, web search). The Quarkus doc search is version-aware and more accurate.
                     4. **Use quarkus/searchTools to discover Dev MCP tools** on the running app for testing, config changes, and extension management.
                     5. **Use quarkus/callTool to invoke Dev MCP tools** — run tests, add extensions, update configuration. Do NOT run Maven/Gradle commands manually.
-                    6. **Hot reload is automatic** — the app recompiles when accessed. Do NOT restart the app after code changes.
+                    6. **After code changes, trigger a reload** via `quarkus/callTool` with toolName `devui-logstream_forceRestart`. Do NOT restart the app manually.
+                    7. **After pom.xml / build.gradle changes** (adding dependencies or extensions), you MUST do a full `quarkus/stop` + `quarkus/start` cycle. A `forceRestart` only recompiles source files — it does NOT re-resolve dependencies.
 
                     ## Rules
 
                     - NEVER implement features manually when a Quarkus extension exists — search for and add the right extension first.
+                    - NEVER silently pick an extension when multiple options exist — ALWAYS present options to the user and wait for their choice.
+                    - NEVER write code for a feature without first loading its skill via `quarkus/skills`.
                     - ALWAYS write tests for every feature — no exceptions.
                     - ALWAYS keep README.md updated with app description, features, endpoints, and Quarkus guide links.
                     - Use `@QuarkusTest` for integration tests — Dev Services auto-starts backing services (databases, messaging, etc.).
@@ -342,10 +429,17 @@ public class CreateTools {
                     skills take precedence over the built-in defaults. This is useful for enforcing
                     team conventions or adjusting patterns for specific project requirements.
                     """;
-            Files.writeString(Path.of(projectDir, "CLAUDE.md"), content, StandardCharsets.UTF_8);
+            Files.writeString(Path.of(projectDir, "AGENTS.md"), agentsMdContent, StandardCharsets.UTF_8);
+            LOG.debugf("Generated AGENTS.md in %s", projectDir);
+
+            // Generate CLAUDE.md that points to AGENTS.md for Claude Code compatibility
+            String claudeMdContent = """
+                    See [AGENTS.md](AGENTS.md) for project instructions.
+                    """;
+            Files.writeString(Path.of(projectDir, "CLAUDE.md"), claudeMdContent, StandardCharsets.UTF_8);
             LOG.debugf("Generated CLAUDE.md in %s", projectDir);
         } catch (IOException e) {
-            LOG.debugf("Failed to generate CLAUDE.md: %s", e.getMessage());
+            LOG.debugf("Failed to generate AGENTS.md: %s", e.getMessage());
         }
     }
 }

@@ -221,12 +221,36 @@ public class DevMcpProxyTools {
         }
     }
 
+    private static final int STARTUP_WAIT_SECONDS = 120;
+    private static final int POLL_INTERVAL_MS = 1000;
+
     private int resolvePort(String projectDir) {
         QuarkusInstance instance = processManager.getInstance(projectDir);
-        if (instance == null || instance.getStatus() != QuarkusInstance.Status.RUNNING) {
+        if (instance == null) {
             throw new IllegalStateException(
                     "Quarkus application is not running at: " + projectDir + ". Start it first with quarkus/start.");
         }
+
+        // If the app is still starting, wait for it to become ready
+        if (instance.getStatus() == QuarkusInstance.Status.STARTING) {
+            long deadline = System.currentTimeMillis() + STARTUP_WAIT_SECONDS * 1000L;
+            while (instance.getStatus() == QuarkusInstance.Status.STARTING
+                    && System.currentTimeMillis() < deadline) {
+                try {
+                    Thread.sleep(POLL_INTERVAL_MS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("Interrupted while waiting for Quarkus to start.");
+                }
+            }
+        }
+
+        if (instance.getStatus() != QuarkusInstance.Status.RUNNING) {
+            throw new IllegalStateException(
+                    "Quarkus application is not running at: " + projectDir
+                            + " (status: " + instance.getStatus() + "). Start it first with quarkus/start.");
+        }
+
         int port = instance.getHttpPort();
         if (port < 0) {
             throw new IllegalStateException("Could not detect HTTP port for the running Quarkus application.");
