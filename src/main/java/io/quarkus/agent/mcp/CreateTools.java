@@ -442,6 +442,7 @@ public class CreateTools {
                     - NEVER write code for a feature without first loading its skill via `quarkus/skills`.
                     - ALWAYS write tests for every feature — no exceptions.
                     - ALWAYS keep README.md updated with app description, features, endpoints, and Quarkus guide links.
+                    - ALWAYS summarize after completing work — when you finish building an app, adding a feature, or completing a task, provide a clear summary of what was done (files created/modified, endpoints added, extensions used, etc.) and suggest logical next steps the user might want to take (e.g. adding security, observability, persistence, testing improvements, deployment).
                     - Use `@QuarkusTest` for integration tests — Dev Services auto-starts backing services (databases, messaging, etc.).
                     - Use `%dev.` and `%test.` profile prefixes for dev/test configuration — never hardcode connection URLs without a profile prefix.
 
