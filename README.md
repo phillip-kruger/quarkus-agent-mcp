@@ -16,24 +16,22 @@ Part of the [DevStar](https://github.com/quarkusio/quarkus/discussions/53093) wo
 
 ## Installation
 
-### Build from source
+### Claude Code plugin (one command)
 
 ```bash
-git clone https://github.com/quarkusio/quarkus-agent-mcp.git
-cd quarkus-agent-mcp
-./mvnw package -DskipTests
+claude plugin install --url https://github.com/quarkusio/quarkus-agent-mcp
 ```
 
-This produces the runner jar at `target/quarkus-app/quarkus-run.jar`.
+This installs the plugin and configures the MCP server automatically. Requires [JBang](https://www.jbang.dev/download/).
 
-### Configure your coding agent
+### Via JBang (recommended)
 
-Once built, register the MCP server with your coding agent. Choose the section for your agent below.
+[JBang](https://www.jbang.dev/download/) resolves the uber-jar from Maven Central automatically — no build step needed.
 
 #### Claude Code
 
 ```bash
-claude mcp add quarkus-agent -- java -jar /path/to/quarkus-agent-mcp/target/quarkus-app/quarkus-run.jar
+claude mcp add quarkus-agent -- jbang quarkus-agent-mcp@quarkusio
 ```
 
 #### VS Code / GitHub Copilot
@@ -45,8 +43,8 @@ Add to `.vscode/mcp.json` in your workspace:
   "servers": {
     "quarkus-agent": {
       "type": "stdio",
-      "command": "java",
-      "args": ["-jar", "/path/to/quarkus-agent-mcp/target/quarkus-app/quarkus-run.jar"]
+      "command": "jbang",
+      "args": ["quarkus-agent-mcp@quarkusio"]
     }
   }
 }
@@ -60,8 +58,8 @@ Add to `.cursor/mcp.json`:
 {
   "mcpServers": {
     "quarkus-agent": {
-      "command": "java",
-      "args": ["-jar", "/path/to/quarkus-agent-mcp/target/quarkus-app/quarkus-run.jar"]
+      "command": "jbang",
+      "args": ["quarkus-agent-mcp@quarkusio"]
     }
   }
 }
@@ -75,11 +73,33 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 {
   "mcpServers": {
     "quarkus-agent": {
-      "command": "java",
-      "args": ["-jar", "/path/to/quarkus-agent-mcp/target/quarkus-app/quarkus-run.jar"]
+      "command": "jbang",
+      "args": ["quarkus-agent-mcp@quarkusio"]
     }
   }
 }
+```
+
+### Via direct download
+
+Download the uber-jar from the [latest GitHub Release](https://github.com/quarkusio/quarkus-agent-mcp/releases/latest), then:
+
+```bash
+claude mcp add quarkus-agent -- java -jar /path/to/quarkus-agent-mcp-1.0.0-runner.jar
+```
+
+### Build from source
+
+```bash
+git clone https://github.com/quarkusio/quarkus-agent-mcp.git
+cd quarkus-agent-mcp
+./mvnw package -DskipTests -Dquarkus.package.jar.type=uber-jar
+```
+
+This produces the uber-jar at `target/quarkus-agent-mcp-1.0.0-SNAPSHOT-runner.jar`.
+
+```bash
+claude mcp add quarkus-agent -- java -jar /path/to/quarkus-agent-mcp/target/quarkus-agent-mcp-1.0.0-SNAPSHOT-runner.jar
 ```
 
 #### Verify
@@ -273,13 +293,13 @@ Configuration via `application.properties`, system properties (`-D`), or environ
 For instant startup (no JVM warmup):
 
 ```bash
-./mvnw package -Dnative -DskipTests
+./mvnw package -Dnative -DskipTests -Dquarkus.package.jar.type=uber-jar
 ```
 
 Then reference the native binary in your MCP config:
 
 ```bash
-claude mcp add quarkus-agent -- ./target/quarkus-agent-mcp-1.0.0-SNAPSHOT-runner
+claude mcp add quarkus-agent -- ./target/quarkus-agent-mcp-*-runner
 ```
 
 ## Related Projects
