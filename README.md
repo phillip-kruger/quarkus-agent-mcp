@@ -310,6 +310,21 @@ claude mcp add quarkus-agent -- ./target/quarkus-agent-mcp-*-runner
 - [chappie-docling-rag](https://github.com/chappie-bot/chappie-docling-rag) — Builds the pgvector Docker images with pre-indexed Quarkus docs
 - [quarkus-mcp-server](https://github.com/quarkiverse/quarkus-mcp-server) — Quarkiverse MCP Server extension used by this project
 
+## Privacy Policy
+
+Quarkus Agent MCP runs entirely on your local machine. It does **not** collect, transmit, or store any personal data, telemetry, or analytics.
+
+The server makes the following outbound network requests, all in service of its documented features:
+
+| Request | Destination | Purpose |
+|---------|-------------|---------|
+| Skills JAR download | `repo1.maven.org` (or your configured Maven mirror) | Download extension-specific coding patterns for your project's Quarkus version |
+| Version check | `github.com/quarkusio/code-with-quarkus-compare` | Determine the latest Quarkus version and fetch reference build files for update comparison |
+| Documentation container | `ghcr.io/quarkusio/chappie-ingestion-quarkus` | Pull a Docker image with pre-indexed Quarkus documentation for local semantic search |
+| Dev MCP proxy | `localhost` only | Communicate with your running Quarkus application's Dev MCP server |
+
+No data is sent to Quarkus, Red Hat, or any third party. All downloaded artifacts are cached locally in standard locations (`~/.m2/repository`, Docker image cache). Source code and project files never leave your machine.
+
 ## License
 
 Apache License 2.0
