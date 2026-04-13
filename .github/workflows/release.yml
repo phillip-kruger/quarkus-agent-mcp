@@ -1,8 +1,8 @@
 name: Release
 
 on:
-  push:
-    tags: [ 'v[0-9]+.[0-9]+.[0-9]+*' ]
+  release:
+    types: [ published ]
 
 jobs:
   release:
@@ -24,9 +24,10 @@ jobs:
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           gpg-passphrase: GPG_PASSPHRASE
 
-      - name: Set version from tag
+      - name: Set version from release tag
         run: |
-          VERSION=${GITHUB_REF_NAME#v}
+          VERSION=${{ github.event.release.tag_name }}
+          VERSION=${VERSION#v}
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
             echo "Error: Invalid version format: $VERSION"
             exit 1
@@ -41,12 +42,10 @@ jobs:
           SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          files: |
-            target/quarkus-agent-mcp-${{ env.VERSION }}-runner.jar
+      - name: Upload uber-jar to release
+        run: gh release upload ${{ github.event.release.tag_name }} target/quarkus-agent-mcp-${{ env.VERSION }}-runner.jar --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Update version in JBang catalog and plugin manifest
         run: |
