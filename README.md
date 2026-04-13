@@ -16,10 +16,13 @@ Part of the [DevStar](https://github.com/quarkusio/quarkus/discussions/53093) wo
 
 ## Installation
 
-### Claude Code plugin (one command)
+### Claude Code plugin
+
+Add the marketplace and install the plugin:
 
 ```bash
-claude plugin install --url https://github.com/quarkusio/quarkus-agent-mcp
+claude plugin marketplace add quarkusio/quarkus-agent-mcp
+claude plugin install quarkus-agent@quarkus-tools
 ```
 
 This installs the plugin and configures the MCP server automatically. Requires [JBang](https://www.jbang.dev/download/).

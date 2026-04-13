@@ -61,10 +61,11 @@ jobs:
           }
           CATALOG_EOF
           jq --arg v "$VERSION" '.version = $v' .claude-plugin/plugin.json > tmp.json && mv tmp.json .claude-plugin/plugin.json
+          jq --arg v "$VERSION" '.plugins[0].version = $v' .claude-plugin/marketplace.json > tmp.json && mv tmp.json .claude-plugin/marketplace.json
 
       - name: Commit updated JBang catalog and plugin manifest
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: update versions for v${{ env.VERSION }}"
-          file_pattern: jbang-catalog.json .claude-plugin/plugin.json
+          file_pattern: jbang-catalog.json .claude-plugin/plugin.json .claude-plugin/marketplace.json
           branch: main
