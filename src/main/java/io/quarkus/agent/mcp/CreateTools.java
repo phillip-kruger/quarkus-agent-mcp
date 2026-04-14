@@ -430,7 +430,7 @@ public class CreateTools {
                     1. **Use quarkus/update (via subagent) when returning to this project** — checks if the Quarkus version is up-to-date and suggests upgrades.
                     2. **Use quarkus/skills BEFORE writing any code or tests** — it contains extension-specific patterns, testing approaches, and common pitfalls that prevent mistakes. Call this EVERY time you are about to add or modify a feature, not just at project creation.
                     3. **Use quarkus/searchDocs for Quarkus documentation** — do NOT use generic documentation tools (Context7, web search). The Quarkus doc search is version-aware and more accurate.
-                    4. **Use quarkus/searchTools to discover Dev MCP tools** on the running app for testing, config changes, and extension management.
+                    4. **Use quarkus/searchTools to discover Dev MCP tools** on the running app for testing, config changes, and extension management. The tool list is **dynamic** — it changes when extensions are added or removed. Re-call `quarkus/searchTools` after any extension change to discover newly available tools.
                     5. **Use quarkus/callTool to invoke Dev MCP tools** — run tests, add extensions, update configuration. Do NOT run Maven/Gradle commands manually.
                     6. **After code changes, trigger a reload** via `quarkus/callTool` with toolName `devui-logstream_forceRestart`. Do NOT restart the app manually.
                     7. **After pom.xml / build.gradle changes** (adding dependencies or extensions), you MUST do a full `quarkus/stop` + `quarkus/start` cycle. A `forceRestart` only recompiles source files — it does NOT re-resolve dependencies.

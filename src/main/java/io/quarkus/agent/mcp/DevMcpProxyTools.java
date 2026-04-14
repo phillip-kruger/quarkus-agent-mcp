@@ -58,7 +58,9 @@ public class DevMcpProxyTools {
 
     @Tool(name = "quarkus/searchTools", description = "Discover available tools on the running Quarkus app's Dev MCP server. "
             + "Use this before interacting with the running app — for testing, config, extensions, "
-            + "endpoints, dev services, etc. Then use quarkus/callTool to invoke the discovered tool.")
+            + "endpoints, dev services, etc. Then use quarkus/callTool to invoke the discovered tool. "
+            + "The tool list is DYNAMIC — it changes when extensions are added or removed. "
+            + "Re-call this after any extension change to discover newly available tools.")
     ToolResponse searchTools(
             @ToolArg(description = "Absolute path to the Quarkus project directory") String projectDir,
             @ToolArg(description = "Search query to filter tools by name or description (case-insensitive). "
