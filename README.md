@@ -167,7 +167,7 @@ NEW PROJECT                           EXISTING PROJECT
 
 ### What the agent can do with a running app
 
-Once a Quarkus app is running in dev mode, the agent can discover and use all Dev MCP tools via `quarkus/searchTools` and `quarkus/callTool`. These typically include:
+Once a Quarkus app is running in dev mode, the agent can discover and use all Dev MCP tools via `quarkus/searchTools` and `quarkus/callTool`. The tool list is **dynamic** — it changes when extensions are added or removed, so the agent should re-discover tools after any extension change. Typical tools include:
 
 | Capability | How to discover | Example |
 |-----------|----------------|---------|
