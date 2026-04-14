@@ -818,7 +818,274 @@
 <div class="slides">
 
 <!-- ============================================ -->
-<!-- SLIDE 1: Title -->
+<!-- PART 1: DEVSTAR                             -->
+<!-- ============================================ -->
+
+<!-- ============================================ -->
+<!-- SLIDE 1: DevStar Title -->
+<!-- ============================================ -->
+<section class="title-slide">
+  <h1 style="font-size:3.2em;">Dev<span style="-webkit-text-fill-color: var(--q-red);">Star</span></h1>
+  <div class="subtitle">Quarkus Developer Tooling Workgroup</div>
+  <div class="tagline">
+    Rethinking how developers &mdash; and AI agents &mdash; interact with Quarkus at dev time
+  </div>
+  <div class="agents" style="margin-top:24px;">
+    <span class="tag">Dev UI</span>
+    <span class="tag">Dev MCP</span>
+    <span class="tag">Dev Shell</span>
+    <span class="tag">Dev Assistant</span>
+    <span class="tag">Continuous Testing</span>
+  </div>
+</section>
+
+<!-- ============================================ -->
+<!-- SLIDE 2: Dev UI Architecture -->
+<!-- ============================================ -->
+<section>
+  <h2 style="border-left: 4px solid var(--q-red); padding-left: 20px;">Dev UI &mdash; The Foundation</h2>
+  <p style="font-size:0.7em; color:var(--q-text-dim); margin-bottom: 10px;">
+    Extensions expose functionality via JsonRPC services. Dev UI renders them in the browser.
+  </p>
+  <div class="arch-diagram">
+    <div class="arch-box agent" style="min-width:200px;">
+      <strong style="color:#fff; font-size:1.1em;">Dev UI</strong>
+      <div style="color:var(--q-text-dim); margin-top:4px;">Browser</div>
+    </div>
+
+    <div class="arch-connector bidi"></div>
+    <div class="arch-label">WebSocket</div>
+    <div class="arch-connector"></div>
+
+    <div class="arch-box mcp" style="min-width:600px;">
+      <strong style="color:#fff; font-size:1.1em;">Dev UI Runtime</strong>
+      <div style="display:flex; gap:20px; justify-content:center; margin-top:14px;">
+        <div class="arch-module" style="padding:10px 18px;">JsonRPCRouter</div>
+        <div style="color:var(--q-text-dim); display:flex; align-items:center; font-size:0.9em;">&rarr;</div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <div class="arch-module">JsonRPCService <span style="color:var(--q-text-dim); font-size:0.85em;">(runtime)</span></div>
+          <div class="arch-module">BuildTimeAction <span style="color:var(--q-text-dim); font-size:0.85em;">(deployment)</span></div>
+        </div>
+      </div>
+      <div style="color:var(--q-text-dim); font-size:0.8em; margin-top:12px;">
+        Every extension can contribute pages, actions, and data to Dev UI
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================ -->
+<!-- SLIDE 3: Dev MCP -->
+<!-- ============================================ -->
+<section>
+  <h2 style="border-left: 4px solid var(--q-red); padding-left: 20px;">Dev MCP &mdash; Adding AI Agents</h2>
+  <p style="font-size:0.7em; color:var(--q-text-dim); margin-bottom: 10px;">
+    AI agents connect to the same JsonRPC backend via streamable HTTP &mdash; same tools, new consumer.
+  </p>
+  <div class="arch-diagram">
+    <div style="display:flex; gap:40px; justify-content:center;">
+      <div class="arch-bottom-item">
+        <div class="arch-box agent" style="min-width:160px;">
+          <strong style="color:#fff; font-size:1em;">Dev UI</strong>
+          <div style="color:var(--q-text-dim); font-size:0.85em;">Browser</div>
+        </div>
+        <div class="arch-connector"></div>
+        <div class="arch-label">WebSocket</div>
+      </div>
+      <div class="arch-bottom-item">
+        <div class="arch-box agent" style="min-width:160px;">
+          <strong style="color:#fff; font-size:1em;">AI Agent</strong>
+          <div style="color:var(--q-text-dim); font-size:0.85em;">Claude, Copilot, ...</div>
+        </div>
+        <div class="arch-connector"></div>
+        <div class="arch-label">Streamable HTTP</div>
+      </div>
+    </div>
+
+    <div class="arch-connector"></div>
+
+    <div class="arch-box mcp" style="min-width:600px;">
+      <strong style="color:#fff; font-size:1.1em;">Dev UI Runtime + Dev MCP</strong>
+      <div style="display:flex; gap:20px; justify-content:center; margin-top:14px;">
+        <div class="arch-module" style="padding:10px 18px;">JsonRPCRouter</div>
+        <div style="color:var(--q-text-dim); display:flex; align-items:center; font-size:0.9em;">&rarr;</div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <div class="arch-module">JsonRPCService</div>
+          <div class="arch-module">BuildTimeAction</div>
+        </div>
+      </div>
+      <div style="color:var(--q-text-dim); font-size:0.8em; margin-top:12px;">
+        All running <em>inside</em> the Quarkus process
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================ -->
+<!-- SLIDE 4: DevStar Workgroup -->
+<!-- ============================================ -->
+<section class="section-title">
+  <h2>Two Tracks of Work</h2>
+  <p style="font-size:0.7em; color:var(--q-text-dim); margin-bottom: 12px;">
+    The DevStar workgroup is tackling this from two directions
+  </p>
+  <div class="solution-grid">
+    <div class="solution-card fragment fade-up" style="border-left-color: var(--q-text-dim);">
+      <span class="icon">&#x1F527;</span>
+      <strong>Quarkus 4 &mdash; Dev UI refactor</strong>
+      Break Dev UI into smaller components so the JsonRPC backend can be reused independently.
+      Dev MCP and Dev Shell can run <em>without</em> Dev UI.
+      <div style="margin-top:8px;">
+        <span class="tag red" style="font-size:0.95em;">Breaking for extensions</span>
+        <span class="tag" style="font-size:0.95em;">Not yet started</span>
+      </div>
+    </div>
+    <div class="solution-card fragment fade-up">
+      <span class="icon">&#x1F680;</span>
+      <strong>Agent MCP &mdash; standalone server</strong>
+      A separate MCP server that runs outside the Quarkus process. Manages lifecycle, skills, docs, and proxies to Dev MCP.
+      <div style="margin-top:8px;">
+        <span class="tag green" style="font-size:0.95em;">Nearly ready</span>
+        <span class="tag" style="font-size:0.95em;">Quarkus 3.35+</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================ -->
+<!-- SLIDE 5: Current State -->
+<!-- ============================================ -->
+<section>
+  <h2 style="border-left: 4px solid var(--q-red); padding-left: 20px;">Current State</h2>
+  <p style="font-size:0.65em; color:var(--q-text-dim); margin-bottom: 8px;">
+    Everything lives inside the running Quarkus process &mdash; tightly coupled to Dev UI Runtime
+  </p>
+  <div class="arch-diagram" style="font-size:0.6em;">
+    <!-- Clients row -->
+    <div style="display:flex; gap:24px; justify-content:center;">
+      <div class="arch-box external" style="min-width:120px; padding:10px 16px;">
+        <strong style="color:#fff;">Dev UI</strong>
+        <div style="color:var(--q-text-dim); font-size:0.85em;">Browser</div>
+      </div>
+      <div class="arch-box external" style="min-width:120px; padding:10px 16px;">
+        <strong style="color:#fff;">AI Agent</strong>
+        <div style="color:var(--q-text-dim); font-size:0.85em;">Claude, Copilot</div>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:80px; justify-content:center;">
+      <div class="arch-bottom-item">
+        <div class="arch-connector"></div>
+        <div class="arch-label">WebSocket</div>
+      </div>
+      <div class="arch-bottom-item">
+        <div class="arch-connector"></div>
+        <div class="arch-label">Streamable HTTP</div>
+      </div>
+    </div>
+
+    <!-- The big coupled box -->
+    <div class="arch-box mcp" style="min-width:650px; border-color: var(--q-red);">
+      <strong style="color:#fff; font-size:1.1em;">Quarkus Process</strong>
+      <div style="color:var(--q-text-dim); font-size:0.85em; margin-bottom:10px;">All components tightly coupled to Dev UI Runtime</div>
+      <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+        <div class="arch-module">Dev UI Runtime</div>
+        <div class="arch-module">Dev MCP</div>
+        <div class="arch-module">JsonRPCRouter</div>
+      </div>
+      <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:6px;">
+        <div class="arch-module">Dev Shell</div>
+        <div class="arch-module">Dev Assistant</div>
+        <div class="arch-module">Quarkus Docs</div>
+      </div>
+      <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:6px;">
+        <div class="arch-module">Extension JsonRPCService</div>
+        <div class="arch-module">Extension BuildTimeAction</div>
+      </div>
+    </div>
+
+    <div style="color:var(--q-red); font-size:0.85em; margin-top:12px; text-align:center;">
+      &#x26A0; App not running = no tools, no docs, no shell
+    </div>
+  </div>
+</section>
+
+<!-- ============================================ -->
+<!-- SLIDE 6: Planned Refactor (Quarkus 4) -->
+<!-- ============================================ -->
+<section>
+  <h2 style="border-left: 4px solid var(--q-red); padding-left: 20px;">Quarkus 4 &mdash; Planned Refactor</h2>
+  <p style="font-size:0.65em; color:var(--q-text-dim); margin-bottom: 8px;">
+    Break apart into independent runtimes, each with its own transport &mdash; connected via CDI
+  </p>
+  <div class="arch-diagram" style="font-size:0.6em;">
+    <!-- Clients row -->
+    <div style="display:flex; gap:20px; justify-content:center;">
+      <div class="arch-box external" style="min-width:110px; padding:8px 14px;">
+        <strong style="color:#fff;">Dev UI</strong>
+        <div style="color:var(--q-text-dim); font-size:0.85em;">Browser</div>
+      </div>
+      <div class="arch-box external" style="min-width:110px; padding:8px 14px;">
+        <strong style="color:#fff;">AI Agent</strong>
+        <div style="color:var(--q-text-dim); font-size:0.85em;">Claude, Copilot</div>
+      </div>
+      <div class="arch-box external" style="min-width:110px; padding:8px 14px;">
+        <strong style="color:#fff;">Dev Shell</strong>
+        <div style="color:var(--q-text-dim); font-size:0.85em;">Terminal</div>
+      </div>
+      <div class="arch-box external" style="min-width:110px; padding:8px 14px; border-color:var(--q-red); box-shadow:var(--q-glow-red);">
+        <strong style="color:#fff;">Agent MCP</strong>
+        <div style="color:var(--q-text-dim); font-size:0.85em;">stdio</div>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:40px; justify-content:center;">
+      <div class="arch-label">WebSocket</div>
+      <div class="arch-label">Streamable HTTP</div>
+      <div class="arch-label">CDI</div>
+      <div class="arch-label">stdio</div>
+    </div>
+
+    <div class="arch-connector"></div>
+
+    <!-- Separated runtimes -->
+    <div style="display:flex; gap:10px; justify-content:center;">
+      <div class="arch-box" style="min-width:130px; padding:10px 14px; border-color:var(--q-blue); background:rgba(70,149,235,0.06);">
+        <strong style="color:#fff; font-size:0.95em;">Dev UI<br>Runtime</strong>
+        <div style="color:var(--q-text-dim); font-size:0.8em; margin-top:4px;">WebSocket</div>
+      </div>
+      <div class="arch-box" style="min-width:130px; padding:10px 14px; border-color:var(--q-blue); background:rgba(70,149,235,0.06);">
+        <strong style="color:#fff; font-size:0.95em;">Dev MCP<br>Runtime</strong>
+        <div style="color:var(--q-text-dim); font-size:0.8em; margin-top:4px;">Streamable HTTP</div>
+      </div>
+      <div class="arch-box" style="min-width:130px; padding:10px 14px; border-color:var(--q-blue); background:rgba(70,149,235,0.06);">
+        <strong style="color:#fff; font-size:0.95em;">Dev Shell<br>Runtime</strong>
+        <div style="color:var(--q-text-dim); font-size:0.8em; margin-top:4px;">CDI</div>
+      </div>
+    </div>
+
+    <div class="arch-connector bidi"></div>
+    <div class="arch-label">CDI</div>
+    <div class="arch-connector"></div>
+
+    <!-- Shared backend -->
+    <div class="arch-box mcp" style="min-width:550px;">
+      <strong style="color:#fff; font-size:1em;">Dev JsonRPC Runtime</strong>
+      <div style="display:flex; gap:8px; justify-content:center; margin-top:10px;">
+        <div class="arch-module">JsonRPCRouter</div>
+        <div class="arch-module">Extension Services</div>
+        <div class="arch-module">Quarkus Docs</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================ -->
+<!-- PART 2: AGENT MCP                           -->
+<!-- ============================================ -->
+
+<!-- ============================================ -->
+<!-- SLIDE 5: Agent MCP Title -->
 <!-- ============================================ -->
 <section class="title-slide">
   <div class="logo-container">
@@ -839,30 +1106,33 @@
 </section>
 
 <!-- ============================================ -->
-<!-- SLIDE 2: The Problem -->
+<!-- SLIDE 6: The Problem -->
 <!-- ============================================ -->
 <section class="section-title">
-  <h2>The Problem</h2>
+  <h2>Dev MCP &mdash; Not Enough</h2>
+  <p style="font-size:0.7em; color:var(--q-text-dim); margin-bottom: 4px;">
+    Quarkus ships a Dev MCP server at <span style="font-family:'JetBrains Mono',monospace; color:var(--q-blue);">/q/dev-mcp</span> &mdash; but it has significant limitations
+  </p>
   <div class="problem-grid">
     <div class="problem-card fragment fade-up">
       <span class="icon">&#x1F6AB;</span>
-      <strong>No Quarkus awareness</strong>
-      AI agents don't understand Quarkus conventions, CDI, or the extension ecosystem
+      <strong>Only when the app is running</strong>
+      Dev MCP lives inside the Quarkus process &mdash; no app, no tools. Can't scaffold, can't recover from crashes.
     </div>
     <div class="problem-card fragment fade-up">
-      <span class="icon">&#x1F528;</span>
-      <strong>Hand-coding over extensions</strong>
-      Agents implement features from scratch instead of using purpose-built extensions
+      <span class="icon">&#x1F4A5;</span>
+      <strong>Too many tools at once</strong>
+      Exposes every Dev UI method as a tool. Agents get overwhelmed by a flat list of 50+ tools with no context.
     </div>
     <div class="problem-card fragment fade-up">
-      <span class="icon">&#x26A0;</span>
-      <strong>Missing best practices</strong>
-      No knowledge of testing patterns, Dev Services, profile config, or common pitfalls
+      <span class="icon">&#x1F9E0;</span>
+      <strong>Tools without knowledge</strong>
+      Agents can call tools but don't know <em>when</em> or <em>why</em>. No skills, no patterns, no best practices.
     </div>
     <div class="problem-card fragment fade-up">
-      <span class="icon">&#x1F504;</span>
-      <strong>No structured workflow</strong>
-      No way to guide agents through the right Quarkus development steps in order
+      <span class="icon">&#x1F4D6;</span>
+      <strong>No documentation access</strong>
+      Agents can't search Quarkus guides or API docs &mdash; they rely on stale training data instead.
     </div>
   </div>
 </section>
@@ -1262,7 +1532,7 @@
     </div>
   </div>
   <div style="margin-top: 28px;" class="fragment fade-up">
-    <h3 style="font-size:0.9em; margin-bottom:12px;">Available Dev Tools</h3>
+    <h3 style="font-size:0.9em; margin-bottom:12px;">Example Dev Tools</h3>
     <div class="devtools-examples">
       <span class="devtool-tag">devui-testing_runTests</span>
       <span class="devtool-tag">devui-testing_runTest</span>
@@ -1285,7 +1555,7 @@
 <!-- ============================================ -->
 <section>
   <h2 style="border-left: 4px solid var(--q-red); padding-left: 20px;">Key Design Decisions</h2>
-  <div class="design-grid">
+  <div class="design-grid" style="grid-template-columns: 1fr 1fr 1fr;">
     <div class="design-card fragment fade-up">
       <div class="icon">&#x1F6E1;</div>
       <strong>Standalone Process</strong>
@@ -1297,30 +1567,74 @@
       <p>pgvector container starts on first doc search. No upfront cost if not needed.</p>
     </div>
     <div class="design-card fragment fade-up">
-      <div class="icon">&#x1F4CB;</div>
-      <strong>Ring Buffer Logs</strong>
-      <p>Bounded memory (500 lines). No unbounded growth regardless of app runtime.</p>
-    </div>
-    <div class="design-card fragment fade-up">
       <div class="icon">&#x1F3AF;</div>
       <strong>Version-First</strong>
       <p>Docs, skills, and containers are all version-aware. Matches your project exactly.</p>
-    </div>
-    <div class="design-card fragment fade-up">
-      <div class="icon">&#x1F512;</div>
-      <strong>Security</strong>
-      <p>Input validation, wrapper script git checks, XML entity protection, semver regex.</p>
-    </div>
-    <div class="design-card fragment fade-up">
-      <div class="icon">&#x1F500;</div>
-      <strong>Concurrent</strong>
-      <p>ConcurrentHashMap everywhere. Multiple projects and agents can run simultaneously.</p>
     </div>
   </div>
 </section>
 
 <!-- ============================================ -->
-<!-- SLIDE 13: Demo -->
+<!-- SLIDE 13: Extension Developer Guide -->
+<!-- ============================================ -->
+<section>
+  <h2 style="border-left: 4px solid var(--q-red); padding-left: 20px;">For Extension Developers</h2>
+  <p style="font-size:0.7em; color:var(--q-text-dim); margin-bottom: 8px;">
+    How to make your extension work great with AI agents
+  </p>
+  <div class="workflow">
+    <div class="workflow-step fragment fade-up">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <span class="step-desc"><strong style="color:#fff;">Build a Quarkus app</strong> using Agent MCP with your extension</span>
+      </div>
+    </div>
+    <div class="workflow-line"></div>
+    <div class="workflow-step fragment fade-up">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <span class="step-desc"><strong style="color:#fff;">Use a small model</strong> &mdash; if it works with a budget LLM, it works everywhere</span>
+        <span class="tag" style="font-size:0.85em;">Haiku</span>
+        <span class="tag" style="font-size:0.85em;">GPT-4o mini</span>
+      </div>
+    </div>
+    <div class="workflow-line"></div>
+    <div class="workflow-step fragment fade-up">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <span class="step-desc"><strong style="color:#fff;">Note what the agent gets wrong</strong> &mdash; wrong patterns, missed conventions, bad defaults</span>
+      </div>
+    </div>
+    <div class="workflow-line"></div>
+    <div class="workflow-step fragment fade-up">
+      <div class="step-num">4</div>
+      <div class="step-content">
+        <span class="step-tool">SKILL.md</span>
+        <span class="step-arrow">&rarr;</span>
+        <span class="step-desc"><strong style="color:#fff;">Write a skill override</strong> to fix those mistakes. Ask the agent to write it &mdash; it just learned the correct approach.</span>
+      </div>
+    </div>
+    <div class="workflow-line"></div>
+    <div class="workflow-step fragment fade-up">
+      <div class="step-num">5</div>
+      <div class="step-content">
+        <span class="step-tool">Dev MCP</span>
+        <span class="step-arrow">&rarr;</span>
+        <span class="step-desc"><strong style="color:#fff;">Check Dev MCP tools</strong> &mdash; does the agent use them? What's missing or needs changing?</span>
+      </div>
+    </div>
+    <div class="workflow-line"></div>
+    <div class="workflow-step fragment fade-up">
+      <div class="step-num" style="background: var(--q-green); color: #0a0e17;">6</div>
+      <div class="step-content">
+        <span class="step-desc"><strong style="color:#fff;">PR against Quarkus</strong> &mdash; add the skill + Dev MCP changes upstream</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================ -->
+<!-- SLIDE 14: Demo -->
 <!-- ============================================ -->
 <section class="demo-slide">
   <h2>Demo Time</h2>
