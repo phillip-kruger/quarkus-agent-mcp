@@ -92,7 +92,7 @@ public class DevMcpProxyTools {
             + "Does NOT require the app to be running — reads from built extension JARs. "
             + "If the app is still building (just created), this will wait for the build to complete. "
             + "Skills can be customized per-project by placing SKILL.md files under "
-            + "src/main/resources/META-INF/skills/<extension-name>/SKILL.md in the project directory. "
+            + ".quarkus/skills/<extension-name>/SKILL.md in the project directory. "
             + "Project-level skills override the built-in defaults.")
     ToolResponse skills(
             @ToolArg(description = "Absolute path to the Quarkus project directory") String projectDir,
