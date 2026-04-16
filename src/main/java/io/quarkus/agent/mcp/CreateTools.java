@@ -476,10 +476,18 @@ public class CreateTools {
 
                     ## Customizing Skills
 
-                    Extension skills can be overridden per-project by placing SKILL.md files under
-                    `.quarkus/skills/<extension-name>/SKILL.md`. Project-level
-                    skills take precedence over the built-in defaults. This is useful for enforcing
-                    team conventions or adjusting patterns for specific project requirements.
+                    Extension skills can be customized per-project or globally using `quarkus/updateSkill`.
+                    When the user asks to update or customize a skill, ask them:
+                    1. **Enhance or override?** — Enhance (default) appends content to the base skill.
+                       Override fully replaces the base skill.
+                    2. **Project or global scope?** — Project scope (`.quarkus/skills/`) affects only this project.
+                       Global scope (`~/.quarkus/skills/`) affects all projects.
+
+                    Skills use a three-layer chain: JAR defaults → global customizations → project customizations.
+                    Each layer can either enhance (append to) or override (replace) the previous layer.
+
+                    You can also manually place SKILL.md files under `.quarkus/skills/<extension-name>/SKILL.md`.
+                    Use `mode: enhance` (default) or `mode: override` in the YAML frontmatter to control behavior.
                     """;
             Files.writeString(Path.of(projectDir, "AGENTS.md"), agentsMdContent, StandardCharsets.UTF_8);
             LOG.debugf("Generated AGENTS.md in %s", projectDir);

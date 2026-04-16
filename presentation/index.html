@@ -1239,6 +1239,7 @@
     <div class="tool-group fragment fade-up">
       <h3>&#x1F9E0; Intelligence</h3>
       <div class="tool-name">quarkus/skills <span>extension patterns</span></div>
+      <div class="tool-name">quarkus/updateSkill <span>customize skills</span></div>
       <div class="tool-name">quarkus/searchDocs <span>semantic doc search</span></div>
     </div>
     <div class="tool-group fragment fade-up">
@@ -1365,20 +1366,20 @@
 <section>
   <h2 style="border-left: 4px solid var(--q-red); padding-left: 20px;">How Skills Work</h2>
   <p style="font-size:0.7em; color:var(--q-text-dim); margin-bottom: 8px;">
-    Three-layer override chain &mdash; each layer overlays the previous by extension name
+    Three-layer chain &mdash; each layer can <strong>enhance</strong> (append) or <strong>override</strong> (replace) the previous
   </p>
   <div class="skills-stack">
     <div class="skill-layer project fragment fade-up">
       <strong>Project-level skills</strong>
       <div class="path">.quarkus/skills/{ext}/SKILL.md</div>
       <div style="color:var(--q-text-dim); font-size:0.9em; margin-top:4px;">Team conventions &amp; project-specific patterns</div>
-      <span class="skill-badge wins">WINS</span>
+      <span class="skill-badge wins">ENHANCE / OVERRIDE</span>
     </div>
     <div class="skill-layer user fragment fade-up">
       <strong>User-level skills</strong>
       <div class="path">~/.quarkus/skills/{ext}/SKILL.md</div>
-      <div style="color:var(--q-text-dim); font-size:0.9em; margin-top:4px;">Personal overrides &amp; extension dev testing</div>
-      <span class="skill-badge override">OVERRIDES</span>
+      <div style="color:var(--q-text-dim); font-size:0.9em; margin-top:4px;">Personal customizations &amp; extension dev testing</div>
+      <span class="skill-badge override">ENHANCE / OVERRIDE</span>
     </div>
     <div class="skill-layer jar fragment fade-up">
       <strong>JAR skills (baseline)</strong>
@@ -1387,6 +1388,10 @@
       <span class="skill-badge baseline">BASELINE</span>
     </div>
   </div>
+  <p class="fragment fade-up" style="font-size:0.6em; color:var(--q-text-dim); margin-top: 12px;">
+    Default is <strong>enhance</strong> &mdash; add project rules without losing built-in guidance. Use <code>mode: override</code> for full replacement.
+    <br>Agents can use <code>quarkus/updateSkill</code> to create customizations interactively.
+  </p>
 </section>
 
 <!-- ============================================ -->
@@ -1611,7 +1616,7 @@
       <div class="step-content">
         <span class="step-tool">SKILL.md</span>
         <span class="step-arrow">&rarr;</span>
-        <span class="step-desc"><strong style="color:#fff;">Write a skill override</strong> to fix those mistakes. Ask the agent to write it &mdash; it just learned the correct approach.</span>
+        <span class="step-desc"><strong style="color:#fff;">Enhance the skill</strong> to fix those mistakes. Ask the agent to use <code>quarkus/updateSkill</code> &mdash; it adds your rules on top of the base skill.</span>
       </div>
     </div>
     <div class="workflow-line"></div>

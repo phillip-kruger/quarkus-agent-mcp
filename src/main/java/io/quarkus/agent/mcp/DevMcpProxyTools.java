@@ -94,9 +94,10 @@ public class DevMcpProxyTools {
             + "If the app is still building (just created), this will wait for the build to complete. "
             + "Skills may include an 'Available Dev MCP Tools' section listing extension-specific Dev MCP tools "
             + "that can be invoked via quarkus/callTool (e.g. OpenAPI schema retrieval, scheduler job management). "
-            + "Skills can be customized per-project by placing SKILL.md files under "
-            + ".quarkus/skills/<extension-name>/SKILL.md in the project directory. "
-            + "Project-level skills override the built-in defaults.",
+            + "Skills can be customized using quarkus/updateSkill. Customizations use a three-layer chain: "
+            + "JAR defaults → global (~/.quarkus/skills/) → project (.quarkus/skills/). "
+            + "By default, customizations ENHANCE (append to) the base skill. "
+            + "Use mode 'override' to fully replace a base skill.",
             annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false,
                     idempotentHint = true, openWorldHint = false))
     ToolResponse skills(
@@ -178,6 +179,44 @@ public class DevMcpProxyTools {
         }
         // RUNNING or timed out (still STARTING) — try reading skills either way
         return SkillReader.readSkills(projectDir, localSkillsDir.map(Path::of).orElse(null));
+    }
+
+    @Tool(name = "quarkus/updateSkill", description = "Create or update a skill customization for a Quarkus extension. "
+            + "Use this when the user wants to add project conventions, team standards, or guardrails to an extension skill. "
+            + "IMPORTANT: Before writing, ask the user two questions: "
+            + "(1) Should this ENHANCE the existing skill (append your content to the base) or OVERRIDE it (fully replace the base)? "
+            + "Enhance is the default and recommended for most cases. "
+            + "(2) Should this be saved at PROJECT scope (.quarkus/skills/ in the project, affects only this project) "
+            + "or GLOBAL scope (~/.quarkus/skills/, affects all projects)?",
+            annotations = @Tool.Annotations(readOnlyHint = false, destructiveHint = false, idempotentHint = true))
+    ToolResponse updateSkill(
+            @ToolArg(description = "Absolute path to the Quarkus project directory") String projectDir,
+            @ToolArg(description = "The extension skill name (e.g. 'quarkus-rest', 'quarkus-hibernate-orm-panache')") String skillName,
+            @ToolArg(description = "The skill content in markdown (without frontmatter — it will be generated)") String content,
+            @ToolArg(description = "Optional description for the skill", required = false) String description,
+            @ToolArg(description = "Mode: 'enhance' (default) appends to the base skill, 'override' fully replaces it",
+                    required = false) String mode,
+            @ToolArg(description = "Scope: 'project' (default) saves under .quarkus/skills/ in the project, "
+                    + "'global' saves under ~/.quarkus/skills/", required = false) String scope) {
+        try {
+            SkillReader.SkillMode skillMode = SkillReader.SkillMode.fromString(mode);
+            boolean projectScope = !"global".equalsIgnoreCase(scope);
+
+            Path written = SkillReader.writeSkill(
+                    skillName, content, description, skillMode,
+                    projectDir, localSkillsDir.map(Path::of).orElse(null), projectScope);
+
+            String modeLabel = skillMode == SkillReader.SkillMode.ENHANCE ? "enhance" : "override";
+            String scopeLabel = projectScope ? "project" : "global";
+            return ToolResponse.success(
+                    "Skill '" + skillName + "' saved successfully.\n"
+                            + "- **Mode**: " + modeLabel + "\n"
+                            + "- **Scope**: " + scopeLabel + "\n"
+                            + "- **Path**: " + written + "\n\n"
+                            + "The skill will take effect on the next call to `quarkus/skills`.");
+        } catch (Exception e) {
+            return ToolResponse.error("Failed to write skill: " + e.getMessage());
+        }
     }
 
     @Tool(name = "quarkus/callTool", description = "Invoke a Dev MCP tool by name on the running Quarkus app. "
