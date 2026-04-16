@@ -183,13 +183,20 @@ Once a Quarkus app is running in dev mode, the agent can discover and use all De
 
 The agent can read extension-specific coding skills using `quarkus/skills`. Skills contain patterns, testing guidelines, and common pitfalls for each extension — things like "always use `@Transactional` for write operations with Panache" or "don't create REST clients manually, let CDI inject them."
 
-Skills are loaded using a three-layer override chain (most specific wins):
+Skills are loaded using a three-layer chain (most specific wins):
 
 1. **JAR skills** — from the `quarkus-extension-skills` JAR, automatically downloaded from Maven Central (or a configured mirror) for the project's Quarkus version. These are the official defaults.
 2. **User-level skills** — from `~/.quarkus/skills/<extension-name>/SKILL.md` (or a directory configured via `agent-mcp.local-skills-dir`). Useful for extension developers testing new or modified skills without rebuilding the aggregated JAR.
 3. **Project-level skills** — from `.quarkus/skills/<extension-name>/SKILL.md` in the project directory. Allows teams to customize extension patterns for their specific project conventions.
 
-Each layer overrides the previous by skill name. For example, a project-level `quarkus-rest` skill replaces both the user-level and JAR versions.
+Each layer can either **enhance** (default) or **override** the previous layer, controlled by the `mode` field in the SKILL.md frontmatter:
+
+- **`mode: enhance`** (default) — appends content to the base skill. The base content is preserved and the customization is added after a separator. This is ideal for adding project conventions or team standards without losing the built-in guidance.
+- **`mode: override`** — fully replaces the base skill. Use this when you need complete control over a skill's content.
+
+The agent can also create or update skill customizations using `quarkus/updateSkill`. When the user asks to customize a skill, the agent will ask:
+1. **Enhance or override?** — append to the base skill or fully replace it.
+2. **Project or global scope?** — save under `.quarkus/skills/` (this project only) or `~/.quarkus/skills/` (all projects).
 
 ### Documentation search
 
@@ -225,6 +232,7 @@ For existing projects, `quarkus/update` checks if the Quarkus version is current
 | Tool | Description | Parameters |
 |------|-------------|------------|
 | `quarkus/skills` | Get coding patterns, testing guidelines, and pitfalls for project extensions | `projectDir` (required), `query` |
+| `quarkus/updateSkill` | Create or update a skill customization (enhance or override) | `projectDir` (required), `skillName` (required), `content` (required), `description`, `mode`, `scope` |
 
 ### Lifecycle Management
 
@@ -289,7 +297,7 @@ Configuration via `application.properties`, system properties (`-D`), or environ
 | `agent-mcp.doc-search.pg-password` | `quarkus` | PostgreSQL password |
 | `agent-mcp.doc-search.pg-database` | `quarkus` | PostgreSQL database |
 | `agent-mcp.doc-search.min-score` | `0.82` | Minimum similarity score for search results |
-| `agent-mcp.local-skills-dir` | `~/.quarkus/skills` | Directory for user-level skill overrides |
+| `agent-mcp.local-skills-dir` | `~/.quarkus/skills` | Directory for user-level skill customizations |
 
 ## Building a Native Image
 

@@ -39,6 +39,7 @@ class SkillReaderTest {
         assertEquals("A Jakarta REST implementation", info.description());
         assertTrue(info.content().contains("### REST Endpoints"));
         assertFalse(info.content().contains("---"));
+        assertEquals(SkillReader.SkillMode.ENHANCE, info.mode());
     }
 
     @Test
@@ -331,5 +332,298 @@ class SkillReaderTest {
         String url = SkillReader.parseMirrorUrl(settingsFile);
 
         assertNull(url);
+    }
+
+    // --- Enhance mode tests ---
+
+    @Test
+    void parseFrontmatterDefaultsToEnhanceMode() {
+        String content = """
+                ---
+                name: quarkus-rest
+                description: "REST extension"
+                ---
+
+                ### REST
+                """;
+
+        SkillReader.SkillInfo info = SkillReader.parseFrontmatter(content);
+
+        assertEquals(SkillReader.SkillMode.ENHANCE, info.mode());
+    }
+
+    @Test
+    void parseFrontmatterParsesEnhanceMode() {
+        String content = """
+                ---
+                name: quarkus-rest
+                mode: enhance
+                ---
+
+                ### Extra REST patterns
+                """;
+
+        SkillReader.SkillInfo info = SkillReader.parseFrontmatter(content);
+
+        assertEquals(SkillReader.SkillMode.ENHANCE, info.mode());
+    }
+
+    @Test
+    void parseFrontmatterParsesOverrideMode() {
+        String content = """
+                ---
+                name: quarkus-rest
+                mode: override
+                ---
+
+                ### Fully custom REST
+                """;
+
+        SkillReader.SkillInfo info = SkillReader.parseFrontmatter(content);
+
+        assertEquals(SkillReader.SkillMode.OVERRIDE, info.mode());
+    }
+
+    @Test
+    void enhanceModeAppendsContentToBaseSkill() throws Exception {
+        // Create a JAR with a base skill
+        Path jarPath = tempDir.resolve("skills.jar");
+        try (JarOutputStream jos = new JarOutputStream(new FileOutputStream(jarPath.toFile()))) {
+            jos.putNextEntry(new JarEntry("META-INF/skills/quarkus-rest/SKILL.md"));
+            jos.write("""
+                    ---
+                    name: quarkus-rest
+                    description: "REST extension"
+                    ---
+
+                    ### Base REST patterns
+                    Use @Path and @GET.
+                    """.getBytes(StandardCharsets.UTF_8));
+            jos.closeEntry();
+        }
+
+        // Create a local enhance skill
+        Path skillsDir = tempDir.resolve("local-skills/quarkus-rest");
+        Files.createDirectories(skillsDir);
+        Files.writeString(skillsDir.resolve("SKILL.md"), """
+                ---
+                name: quarkus-rest
+                mode: enhance
+                ---
+
+                ### Project conventions
+                Always use configKey with @RegisterRestClient.
+                """);
+
+        // Load and overlay
+        List<SkillReader.SkillInfo> base = SkillReader.readSkillsFromJar(jarPath);
+        java.util.Map<String, SkillReader.SkillInfo> skillMap = new java.util.LinkedHashMap<>();
+        for (SkillReader.SkillInfo s : base) {
+            skillMap.put(s.name(), s);
+        }
+
+        List<SkillReader.SkillInfo> local = SkillReader.readLocalSkills(tempDir.resolve("local-skills"));
+        // Use reflection-free approach: call readSkills logic manually
+        for (SkillReader.SkillInfo skill : local) {
+            if (skillMap.containsKey(skill.name()) && skill.mode() == SkillReader.SkillMode.ENHANCE) {
+                SkillReader.SkillInfo baseSkill = skillMap.get(skill.name());
+                String merged = baseSkill.content() + "\n\n---\n\n" + skill.content();
+                skillMap.put(skill.name(), new SkillReader.SkillInfo(skill.name(),
+                        skill.description() != null ? skill.description() : baseSkill.description(),
+                        merged, SkillReader.SkillMode.ENHANCE));
+            } else {
+                skillMap.put(skill.name(), skill);
+            }
+        }
+
+        SkillReader.SkillInfo result = skillMap.get("quarkus-rest");
+        assertNotNull(result);
+        assertTrue(result.content().contains("### Base REST patterns"), "Should contain base content");
+        assertTrue(result.content().contains("### Project conventions"), "Should contain enhanced content");
+        assertTrue(result.content().contains("Use @Path and @GET."), "Should preserve base details");
+        assertTrue(result.content().contains("Always use configKey"), "Should include enhancement");
+        assertEquals("REST extension", result.description(), "Should keep base description when enhance has none");
+    }
+
+    @Test
+    void overrideModeReplacesBaseSkill() throws Exception {
+        Path jarPath = tempDir.resolve("skills.jar");
+        try (JarOutputStream jos = new JarOutputStream(new FileOutputStream(jarPath.toFile()))) {
+            jos.putNextEntry(new JarEntry("META-INF/skills/quarkus-rest/SKILL.md"));
+            jos.write("""
+                    ---
+                    name: quarkus-rest
+                    description: "REST extension"
+                    ---
+
+                    ### Base REST patterns
+                    """.getBytes(StandardCharsets.UTF_8));
+            jos.closeEntry();
+        }
+
+        Path skillsDir = tempDir.resolve("local-skills/quarkus-rest");
+        Files.createDirectories(skillsDir);
+        Files.writeString(skillsDir.resolve("SKILL.md"), """
+                ---
+                name: quarkus-rest
+                description: "Custom REST"
+                mode: override
+                ---
+
+                ### Fully custom REST
+                """);
+
+        List<SkillReader.SkillInfo> base = SkillReader.readSkillsFromJar(jarPath);
+        java.util.Map<String, SkillReader.SkillInfo> skillMap = new java.util.LinkedHashMap<>();
+        for (SkillReader.SkillInfo s : base) {
+            skillMap.put(s.name(), s);
+        }
+
+        List<SkillReader.SkillInfo> local = SkillReader.readLocalSkills(tempDir.resolve("local-skills"));
+        for (SkillReader.SkillInfo skill : local) {
+            if (skill.mode() == SkillReader.SkillMode.OVERRIDE) {
+                skillMap.put(skill.name(), skill);
+            }
+        }
+
+        SkillReader.SkillInfo result = skillMap.get("quarkus-rest");
+        assertNotNull(result);
+        assertFalse(result.content().contains("Base REST patterns"), "Should not contain base content");
+        assertTrue(result.content().contains("Fully custom REST"), "Should contain override content");
+        assertEquals("Custom REST", result.description());
+    }
+
+    @Test
+    void enhanceModePreservesBaseDescriptionWhenNotOverridden() throws Exception {
+        Path skillsDir = tempDir.resolve("local-skills/quarkus-rest");
+        Files.createDirectories(skillsDir);
+        Files.writeString(skillsDir.resolve("SKILL.md"), """
+                ---
+                name: quarkus-rest
+                mode: enhance
+                ---
+
+                ### Extra patterns
+                """);
+
+        List<SkillReader.SkillInfo> local = SkillReader.readLocalSkills(tempDir.resolve("local-skills"));
+        assertEquals(1, local.size());
+        assertNull(local.get(0).description(), "Enhance skill without description should be null");
+    }
+
+    @Test
+    void enhanceModeWithDescriptionOverridesBaseDescription() throws Exception {
+        Path jarPath = tempDir.resolve("skills.jar");
+        try (JarOutputStream jos = new JarOutputStream(new FileOutputStream(jarPath.toFile()))) {
+            jos.putNextEntry(new JarEntry("META-INF/skills/quarkus-rest/SKILL.md"));
+            jos.write("""
+                    ---
+                    name: quarkus-rest
+                    description: "Base description"
+                    ---
+
+                    ### Base content
+                    """.getBytes(StandardCharsets.UTF_8));
+            jos.closeEntry();
+        }
+
+        Path skillsDir = tempDir.resolve("local-skills/quarkus-rest");
+        Files.createDirectories(skillsDir);
+        Files.writeString(skillsDir.resolve("SKILL.md"), """
+                ---
+                name: quarkus-rest
+                description: "Enhanced description"
+                mode: enhance
+                ---
+
+                ### Enhanced content
+                """);
+
+        List<SkillReader.SkillInfo> base = SkillReader.readSkillsFromJar(jarPath);
+        java.util.Map<String, SkillReader.SkillInfo> skillMap = new java.util.LinkedHashMap<>();
+        for (SkillReader.SkillInfo s : base) {
+            skillMap.put(s.name(), s);
+        }
+
+        List<SkillReader.SkillInfo> local = SkillReader.readLocalSkills(tempDir.resolve("local-skills"));
+        for (SkillReader.SkillInfo skill : local) {
+            if (skillMap.containsKey(skill.name()) && skill.mode() == SkillReader.SkillMode.ENHANCE) {
+                SkillReader.SkillInfo baseSkill = skillMap.get(skill.name());
+                String merged = baseSkill.content() + "\n\n---\n\n" + skill.content();
+                String desc = skill.description() != null ? skill.description() : baseSkill.description();
+                skillMap.put(skill.name(), new SkillReader.SkillInfo(skill.name(), desc, merged, SkillReader.SkillMode.ENHANCE));
+            }
+        }
+
+        assertEquals("Enhanced description", skillMap.get("quarkus-rest").description());
+    }
+
+    // --- writeSkill tests ---
+
+    @Test
+    void writeSkillCreatesFileWithCorrectFrontmatter() throws Exception {
+        Path projectDir = tempDir.resolve("my-project");
+        Files.createDirectories(projectDir);
+
+        Path written = SkillReader.writeSkill(
+                "quarkus-rest",
+                "### My custom patterns\nUse records for DTOs.",
+                "Custom REST skill",
+                SkillReader.SkillMode.ENHANCE,
+                projectDir.toString(), null, true);
+
+        assertTrue(Files.exists(written));
+        String content = Files.readString(written);
+        assertTrue(content.contains("name: quarkus-rest"));
+        assertTrue(content.contains("description: \"Custom REST skill\""));
+        assertTrue(content.contains("mode: enhance"));
+        assertTrue(content.contains("### My custom patterns"));
+        assertEquals(projectDir.resolve(".quarkus/skills/quarkus-rest/SKILL.md"), written);
+    }
+
+    @Test
+    void writeSkillGlobalScopeWritesToUserDir() throws Exception {
+        Path globalDir = tempDir.resolve("global-skills");
+        Path projectDir = tempDir.resolve("my-project");
+        Files.createDirectories(projectDir);
+
+        Path written = SkillReader.writeSkill(
+                "quarkus-rest",
+                "### Global patterns",
+                null,
+                SkillReader.SkillMode.ENHANCE,
+                projectDir.toString(), globalDir, false);
+
+        assertEquals(globalDir.resolve("quarkus-rest/SKILL.md"), written);
+        String content = Files.readString(written);
+        assertTrue(content.contains("name: quarkus-rest"));
+        assertTrue(content.contains("mode: enhance"));
+        assertFalse(content.contains("description:"), "Should not include description when null");
+    }
+
+    @Test
+    void writeSkillWithOverrideMode() throws Exception {
+        Path projectDir = tempDir.resolve("my-project");
+        Files.createDirectories(projectDir);
+
+        Path written = SkillReader.writeSkill(
+                "quarkus-rest",
+                "### Full replacement",
+                "Override skill",
+                SkillReader.SkillMode.OVERRIDE,
+                projectDir.toString(), null, true);
+
+        String content = Files.readString(written);
+        assertTrue(content.contains("mode: override"));
+    }
+
+    @Test
+    void skillModeFromStringDefaultsToEnhance() {
+        assertEquals(SkillReader.SkillMode.ENHANCE, SkillReader.SkillMode.fromString(null));
+        assertEquals(SkillReader.SkillMode.ENHANCE, SkillReader.SkillMode.fromString("enhance"));
+        assertEquals(SkillReader.SkillMode.ENHANCE, SkillReader.SkillMode.fromString("ENHANCE"));
+        assertEquals(SkillReader.SkillMode.ENHANCE, SkillReader.SkillMode.fromString("anything-else"));
+        assertEquals(SkillReader.SkillMode.OVERRIDE, SkillReader.SkillMode.fromString("override"));
+        assertEquals(SkillReader.SkillMode.OVERRIDE, SkillReader.SkillMode.fromString("OVERRIDE"));
     }
 }

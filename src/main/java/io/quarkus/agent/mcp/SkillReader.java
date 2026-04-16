@@ -53,13 +53,26 @@ public final class SkillReader {
     private static final String MAVEN_CENTRAL_BASE = "https://repo1.maven.org/maven2";
     private static final Pattern FRONTMATTER_NAME = Pattern.compile("^name:\\s*(.+)$", Pattern.MULTILINE);
     private static final Pattern FRONTMATTER_DESC = Pattern.compile("^description:\\s*\"(.+)\"$", Pattern.MULTILINE);
+    private static final Pattern FRONTMATTER_MODE = Pattern.compile("^mode:\\s*(.+)$", Pattern.MULTILINE);
 
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .followRedirects(HttpClient.Redirect.NORMAL)
             .build();
 
-    public record SkillInfo(String name, String description, String content) {
+    public enum SkillMode {
+        ENHANCE,
+        OVERRIDE;
+
+        static SkillMode fromString(String value) {
+            if (value != null && value.trim().equalsIgnoreCase("override")) {
+                return OVERRIDE;
+            }
+            return ENHANCE;
+        }
+    }
+
+    public record SkillInfo(String name, String description, String content, SkillMode mode) {
     }
 
     private SkillReader() {
@@ -130,11 +143,25 @@ public final class SkillReader {
     private static void overlaySkills(Map<String, SkillInfo> target, List<SkillInfo> overlay, String source) {
         for (SkillInfo skill : overlay) {
             if (target.containsKey(skill.name())) {
-                LOG.infof("Skill '%s' overridden by %s", skill.name(), source);
+                if (skill.mode() == SkillMode.ENHANCE) {
+                    SkillInfo base = target.get(skill.name());
+                    String mergedContent = base.content() + "\n\n---\n\n" + skill.content();
+                    String desc = skill.description() != null ? skill.description() : base.description();
+                    target.put(skill.name(), new SkillInfo(skill.name(), desc, mergedContent, SkillMode.ENHANCE));
+                    LOG.infof("Skill '%s' enhanced by %s", skill.name(), source);
+                } else {
+                    target.put(skill.name(), skill);
+                    LOG.infof("Skill '%s' overridden by %s", skill.name(), source);
+                }
             } else {
-                LOG.infof("Skill '%s' added from %s", skill.name(), source);
+                if (skill.mode() == SkillMode.ENHANCE) {
+                    LOG.warnf("Skill '%s' uses enhance mode but no base skill exists — adding as new skill from %s",
+                            skill.name(), source);
+                } else {
+                    LOG.infof("Skill '%s' added from %s", skill.name(), source);
+                }
+                target.put(skill.name(), skill);
             }
-            target.put(skill.name(), skill);
         }
     }
 
@@ -145,6 +172,7 @@ public final class SkillReader {
         String name = "unknown";
         String description = null;
         String body = fullContent;
+        SkillMode mode = SkillMode.ENHANCE;
 
         if (fullContent.startsWith("---")) {
             int endIdx = fullContent.indexOf("---", 3);
@@ -161,10 +189,15 @@ public final class SkillReader {
                 if (descMatcher.find()) {
                     description = descMatcher.group(1).trim();
                 }
+
+                Matcher modeMatcher = FRONTMATTER_MODE.matcher(frontmatter);
+                if (modeMatcher.find()) {
+                    mode = SkillMode.fromString(modeMatcher.group(1));
+                }
             }
         }
 
-        return new SkillInfo(name, description, body);
+        return new SkillInfo(name, description, body, mode);
     }
 
     /**
@@ -226,6 +259,47 @@ public final class SkillReader {
             LOG.debugf("Failed to scan local skills directory %s: %s", skillsDir, e.getMessage());
         }
         return skills;
+    }
+
+    /**
+     * Writes a SKILL.md file to the appropriate directory based on scope.
+     *
+     * @param skillName    the extension name (e.g. "quarkus-rest")
+     * @param content      the markdown content (without frontmatter)
+     * @param description  optional description for the frontmatter
+     * @param mode         ENHANCE or OVERRIDE
+     * @param projectDir   the project directory (used for project-scope writes)
+     * @param localSkillsDir user-level skills directory, or null for the default
+     * @param projectScope true to write under {@code <projectDir>/.quarkus/skills/},
+     *                     false to write under the user-level directory
+     * @return the path the file was written to
+     */
+    static Path writeSkill(String skillName, String content, String description,
+            SkillMode mode, String projectDir, Path localSkillsDir, boolean projectScope) throws IOException {
+        Path baseDir;
+        if (projectScope) {
+            baseDir = Path.of(projectDir, ".quarkus", "skills");
+        } else {
+            baseDir = localSkillsDir != null ? localSkillsDir : DEFAULT_LOCAL_SKILLS_DIR;
+        }
+
+        Path skillDir = baseDir.resolve(skillName);
+        Files.createDirectories(skillDir);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("---\n");
+        sb.append("name: ").append(skillName).append("\n");
+        if (description != null && !description.isBlank()) {
+            sb.append("description: \"").append(description).append("\"\n");
+        }
+        sb.append("mode: ").append(mode.name().toLowerCase()).append("\n");
+        sb.append("---\n\n");
+        sb.append(content);
+
+        Path skillFile = skillDir.resolve(SKILL_FILE_NAME);
+        Files.writeString(skillFile, sb.toString(), StandardCharsets.UTF_8);
+        LOG.infof("Wrote skill '%s' to %s", skillName, skillFile);
+        return skillFile;
     }
 
     /**
