@@ -52,7 +52,8 @@ public class UpdateTools {
             + "Detects the current version, checks for newer releases, compares build files against "
             + "reference projects, and optionally runs 'quarkus update --dry-run' to preview migrations. "
             + "IMPORTANT: For existing Quarkus projects, ALWAYS call this tool using a subagent BEFORE "
-            + "starting any development work to ensure the project is on the latest version.")
+            + "starting any development work to ensure the project is on the latest version.",
+            annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true))
     ToolResponse update(
             @ToolArg(description = "Absolute path to the Quarkus project directory") String projectDir) {
         try {

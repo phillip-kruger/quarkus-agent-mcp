@@ -60,7 +60,8 @@ public class DevMcpProxyTools {
             + "Use this before interacting with the running app — for testing, config, extensions, "
             + "endpoints, dev services, etc. Then use quarkus/callTool to invoke the discovered tool. "
             + "The tool list is DYNAMIC — it changes when extensions are added or removed. "
-            + "Re-call this after any extension change to discover newly available tools.")
+            + "Re-call this after any extension change to discover newly available tools.",
+            annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true))
     ToolResponse searchTools(
             @ToolArg(description = "Absolute path to the Quarkus project directory") String projectDir,
             @ToolArg(description = "Search query to filter tools by name or description (case-insensitive). "
@@ -91,9 +92,13 @@ public class DevMcpProxyTools {
             + "ALWAYS call this BEFORE writing code or tests to learn the correct Quarkus patterns for each extension. "
             + "Does NOT require the app to be running — reads from built extension JARs. "
             + "If the app is still building (just created), this will wait for the build to complete. "
+            + "Skills may include an 'Available Dev MCP Tools' section listing extension-specific Dev MCP tools "
+            + "that can be invoked via quarkus/callTool (e.g. OpenAPI schema retrieval, scheduler job management). "
             + "Skills can be customized per-project by placing SKILL.md files under "
             + "src/main/resources/META-INF/skills/<extension-name>/SKILL.md in the project directory. "
-            + "Project-level skills override the built-in defaults.")
+            + "Project-level skills override the built-in defaults.",
+            annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false,
+                    idempotentHint = true, openWorldHint = false))
     ToolResponse skills(
             @ToolArg(description = "Absolute path to the Quarkus project directory") String projectDir,
             @ToolArg(description = "Optional query to filter skills by extension name (case-insensitive). "

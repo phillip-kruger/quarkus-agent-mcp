@@ -128,6 +128,19 @@ class QuarkusVersionDetectorTest {
     }
 
     @Test
+    void accepts999SnapshotVersion() throws IOException {
+        Files.writeString(tempDir.resolve("pom.xml"), """
+                <project>
+                    <properties>
+                        <quarkus.platform.version>999-SNAPSHOT</quarkus.platform.version>
+                    </properties>
+                </project>
+                """);
+
+        assertEquals("999-SNAPSHOT", QuarkusVersionDetector.detect(tempDir.toString()));
+    }
+
+    @Test
     void acceptsFinalVersion() throws IOException {
         Files.writeString(tempDir.resolve("pom.xml"), """
                 <project>
