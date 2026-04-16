@@ -32,7 +32,7 @@ import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
 /**
- * Reads extension skill files (SKILL.md) using a three-layer override chain:
+ * Reads extension skill files (SKILL.md) using a three-layer chain:
  * <ol>
  *   <li><b>JAR skills</b> — from the aggregated {@code quarkus-extension-skills} JAR
  *       shipped with each Quarkus release (baseline defaults)</li>
@@ -41,7 +41,9 @@ import org.w3c.dom.NodeList;
  *   <li><b>Project-level skills</b> — from {@code .quarkus/skills/}
  *       in the project directory (for per-project customization)</li>
  * </ol>
- * Each layer overrides the previous by skill name (most specific wins).
+ * Each layer can either <b>enhance</b> (append to) or <b>override</b> (replace)
+ * the previous layer, controlled by the {@code mode} field in the SKILL.md
+ * frontmatter. The default mode is {@code enhance}.
  */
 public final class SkillReader {
 
@@ -53,7 +55,7 @@ public final class SkillReader {
     private static final String MAVEN_CENTRAL_BASE = "https://repo1.maven.org/maven2";
     private static final Pattern FRONTMATTER_NAME = Pattern.compile("^name:\\s*(.+)$", Pattern.MULTILINE);
     private static final Pattern FRONTMATTER_DESC = Pattern.compile("^description:\\s*\"(.+)\"$", Pattern.MULTILINE);
-    private static final Pattern FRONTMATTER_MODE = Pattern.compile("^mode:\\s*(.+)$", Pattern.MULTILINE);
+    private static final Pattern FRONTMATTER_MODE = Pattern.compile("^mode:\\s*(\\S+)", Pattern.MULTILINE);
 
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
@@ -140,7 +142,7 @@ public final class SkillReader {
         return new ArrayList<>(skillsByName.values());
     }
 
-    private static void overlaySkills(Map<String, SkillInfo> target, List<SkillInfo> overlay, String source) {
+    static void overlaySkills(Map<String, SkillInfo> target, List<SkillInfo> overlay, String source) {
         for (SkillInfo skill : overlay) {
             if (target.containsKey(skill.name())) {
                 if (skill.mode() == SkillMode.ENHANCE) {
@@ -276,6 +278,10 @@ public final class SkillReader {
      */
     static Path writeSkill(String skillName, String content, String description,
             SkillMode mode, String projectDir, Path localSkillsDir, boolean projectScope) throws IOException {
+        if (skillName == null || skillName.contains("/") || skillName.contains("\\") || skillName.contains("..")) {
+            throw new IllegalArgumentException("Invalid skill name: " + skillName);
+        }
+
         Path baseDir;
         if (projectScope) {
             baseDir = Path.of(projectDir, ".quarkus", "skills");
@@ -290,7 +296,7 @@ public final class SkillReader {
         sb.append("---\n");
         sb.append("name: ").append(skillName).append("\n");
         if (description != null && !description.isBlank()) {
-            sb.append("description: \"").append(description).append("\"\n");
+            sb.append("description: \"").append(description.replace("\"", "\\\"")).append("\"\n");
         }
         sb.append("mode: ").append(mode.name().toLowerCase()).append("\n");
         sb.append("---\n\n");

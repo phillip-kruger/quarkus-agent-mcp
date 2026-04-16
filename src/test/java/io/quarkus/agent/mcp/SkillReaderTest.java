@@ -423,18 +423,7 @@ class SkillReaderTest {
         }
 
         List<SkillReader.SkillInfo> local = SkillReader.readLocalSkills(tempDir.resolve("local-skills"));
-        // Use reflection-free approach: call readSkills logic manually
-        for (SkillReader.SkillInfo skill : local) {
-            if (skillMap.containsKey(skill.name()) && skill.mode() == SkillReader.SkillMode.ENHANCE) {
-                SkillReader.SkillInfo baseSkill = skillMap.get(skill.name());
-                String merged = baseSkill.content() + "\n\n---\n\n" + skill.content();
-                skillMap.put(skill.name(), new SkillReader.SkillInfo(skill.name(),
-                        skill.description() != null ? skill.description() : baseSkill.description(),
-                        merged, SkillReader.SkillMode.ENHANCE));
-            } else {
-                skillMap.put(skill.name(), skill);
-            }
-        }
+        SkillReader.overlaySkills(skillMap, local, "local-skills");
 
         SkillReader.SkillInfo result = skillMap.get("quarkus-rest");
         assertNotNull(result);
@@ -480,11 +469,7 @@ class SkillReaderTest {
         }
 
         List<SkillReader.SkillInfo> local = SkillReader.readLocalSkills(tempDir.resolve("local-skills"));
-        for (SkillReader.SkillInfo skill : local) {
-            if (skill.mode() == SkillReader.SkillMode.OVERRIDE) {
-                skillMap.put(skill.name(), skill);
-            }
-        }
+        SkillReader.overlaySkills(skillMap, local, "local-skills");
 
         SkillReader.SkillInfo result = skillMap.get("quarkus-rest");
         assertNotNull(result);
@@ -546,14 +531,7 @@ class SkillReaderTest {
         }
 
         List<SkillReader.SkillInfo> local = SkillReader.readLocalSkills(tempDir.resolve("local-skills"));
-        for (SkillReader.SkillInfo skill : local) {
-            if (skillMap.containsKey(skill.name()) && skill.mode() == SkillReader.SkillMode.ENHANCE) {
-                SkillReader.SkillInfo baseSkill = skillMap.get(skill.name());
-                String merged = baseSkill.content() + "\n\n---\n\n" + skill.content();
-                String desc = skill.description() != null ? skill.description() : baseSkill.description();
-                skillMap.put(skill.name(), new SkillReader.SkillInfo(skill.name(), desc, merged, SkillReader.SkillMode.ENHANCE));
-            }
-        }
+        SkillReader.overlaySkills(skillMap, local, "local-skills");
 
         assertEquals("Enhanced description", skillMap.get("quarkus-rest").description());
     }
@@ -615,6 +593,39 @@ class SkillReaderTest {
 
         String content = Files.readString(written);
         assertTrue(content.contains("mode: override"));
+    }
+
+    @Test
+    void writeSkillRejectsPathTraversal() {
+        Path projectDir = tempDir.resolve("my-project");
+        assertThrows(IllegalArgumentException.class, () -> SkillReader.writeSkill(
+                "../etc", "content", null, SkillReader.SkillMode.ENHANCE,
+                projectDir.toString(), null, true));
+        assertThrows(IllegalArgumentException.class, () -> SkillReader.writeSkill(
+                "foo/bar", "content", null, SkillReader.SkillMode.ENHANCE,
+                projectDir.toString(), null, true));
+        assertThrows(IllegalArgumentException.class, () -> SkillReader.writeSkill(
+                "foo\\bar", "content", null, SkillReader.SkillMode.ENHANCE,
+                projectDir.toString(), null, true));
+        assertThrows(IllegalArgumentException.class, () -> SkillReader.writeSkill(
+                null, "content", null, SkillReader.SkillMode.ENHANCE,
+                projectDir.toString(), null, true));
+    }
+
+    @Test
+    void writeSkillEscapesQuotesInDescription() throws Exception {
+        Path projectDir = tempDir.resolve("my-project");
+        Files.createDirectories(projectDir);
+
+        Path written = SkillReader.writeSkill(
+                "quarkus-rest",
+                "### Patterns",
+                "A \"quoted\" description",
+                SkillReader.SkillMode.ENHANCE,
+                projectDir.toString(), null, true);
+
+        String content = Files.readString(written);
+        assertTrue(content.contains("description: \"A \\\"quoted\\\" description\""));
     }
 
     @Test
