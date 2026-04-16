@@ -63,7 +63,9 @@ public class LifecycleTools {
     }
 
     @Tool(name = "quarkus/status", description = "Get the status of a Quarkus application. "
-            + "Returns: not_started, starting, running (with port), crashed, or stopped.")
+            + "Returns: not_started, starting, running (with port), crashed, or stopped.",
+            annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false,
+                    idempotentHint = true, openWorldHint = false))
     ToolResponse status(
             @ToolArg(description = "Absolute path to the Quarkus project directory") String projectDir) {
         try {
@@ -83,7 +85,8 @@ public class LifecycleTools {
 
     @Tool(name = "quarkus/logs", description = "Get recent log output from a managed Quarkus application. "
             + "For structured exception details (class, message, stack trace, user code location), "
-            + "prefer quarkus/callTool with toolName 'devui-exceptions_getLastException' instead.")
+            + "prefer quarkus/callTool with toolName 'devui-exceptions_getLastException' instead.",
+            annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, openWorldHint = false))
     ToolResponse logs(
             @ToolArg(description = "Absolute path to the Quarkus project directory") String projectDir,
             @ToolArg(description = "Number of recent lines to return (default: 50)", required = false) Integer lines) {
@@ -99,7 +102,9 @@ public class LifecycleTools {
         }
     }
 
-    @Tool(name = "quarkus/list", description = "List all managed Quarkus application instances and their current status.")
+    @Tool(name = "quarkus/list", description = "List all managed Quarkus application instances and their current status.",
+            annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false,
+                    idempotentHint = true, openWorldHint = false))
     ToolResponse list() {
         try {
             Map<String, String> instances = processManager.listInstances();

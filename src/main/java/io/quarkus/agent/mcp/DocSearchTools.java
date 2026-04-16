@@ -92,7 +92,8 @@ public class DocSearchTools {
 
     @Tool(name = "quarkus/searchDocs", description = "Search Quarkus documentation. "
             + "Always use this BEFORE writing Quarkus code to look up correct APIs, annotations, "
-            + "configuration, and best practices. First call may take a moment to start the doc database.")
+            + "configuration, and best practices. First call may take a moment to start the doc database.",
+            annotations = @Tool.Annotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true))
     ToolResponse searchDocs(
             @ToolArg(description = "The search query describing what documentation you're looking for. "
                     + "Examples: 'how to configure datasource', 'CDI dependency injection', "

@@ -24,9 +24,9 @@ public class QuarkusVersionDetector {
     private static final ConcurrentHashMap<String, String> VERSION_CACHE = new ConcurrentHashMap<>();
     private static final String NULL_SENTINEL = "";
 
-    // Only allow versions like 3.21.2, 3.21.2.Final, 3.21.2-SNAPSHOT, 3.21.2.CR1
+    // Only allow versions like 3.21.2, 3.21.2.Final, 3.21.2-SNAPSHOT, 3.21.2.CR1, 999-SNAPSHOT
     private static final Pattern VALID_VERSION = Pattern.compile(
-            "^[0-9]+\\.[0-9]+\\.[0-9]+([.\\-][A-Za-z0-9]+)*$");
+            "^[0-9]+(\\.[0-9]+)*([.\\-][A-Za-z0-9]+)*$");
 
     // Maven: <quarkus.platform.version>3.21.2</quarkus.platform.version>
     private static final Pattern MAVEN_PLATFORM_VERSION = Pattern.compile(
