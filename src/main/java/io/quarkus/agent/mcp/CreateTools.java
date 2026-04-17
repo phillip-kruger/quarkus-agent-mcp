@@ -61,14 +61,21 @@ public class CreateTools {
             + "5) Keep README.md updated with app description, features, endpoints, and Quarkus guide links after every change.")
     ToolResponse create(
             @ToolArg(description = "Absolute path to the directory where the project will be created. "
-                    + "A subdirectory named after the artifactId will be created inside this directory.") String outputDir,
+                    + "By default, a subdirectory named after the artifactId will be created inside this directory. "
+                    + "If the directory name matches the artifactId and the directory is empty, "
+                    + "the project is created directly in this directory instead.") String outputDir,
             @ToolArg(description = "The Maven groupId for the project (e.g. 'com.example')", required = false) String groupId,
             @ToolArg(description = "The Maven artifactId for the project (e.g. 'my-app').", required = false) String artifactId,
             @ToolArg(description = "Comma-separated list of Quarkus extensions to include "
                     + "(e.g. 'rest-jackson,hibernate-orm-panache,jdbc-postgresql')", required = false) String extensions,
             @ToolArg(description = "Build tool to use: 'maven' or 'gradle' (default: maven)", required = false) String buildTool,
             @ToolArg(description = "Quarkus platform version to use (e.g. '3.21.2', '999-SNAPSHOT'). "
-                    + "If omitted, uses the latest release.", required = false) String quarkusVersion) {
+                    + "If omitted, uses the latest release.", required = false) String quarkusVersion,
+            @ToolArg(description = "If true, create the project directly in outputDir instead of a subdirectory. "
+                    + "Set to true when the user asks to create the project 'here', 'in the current directory', "
+                    + "or 'in this directory'. If omitted, auto-detects: when the outputDir name matches "
+                    + "the artifactId and the directory is empty, the project is created in-place.",
+                    required = false) Boolean createInCurrentDir) {
         try {
             String resolvedGroupId = (groupId != null && !groupId.isBlank()) ? groupId : "org.acme";
             String resolvedArtifactId = (artifactId != null && !artifactId.isBlank()) ? artifactId : "quarkus-app";
@@ -96,6 +103,16 @@ public class CreateTools {
                 return ToolResponse.error("Output directory does not exist: " + outputDir);
             }
 
+            boolean createInPlace = shouldCreateInPlace(createInCurrentDir, outDir, resolvedArtifactId);
+            if (createInPlace && !isDirectoryEmptyEnough(outDir)) {
+                if (createInCurrentDir != null && createInCurrentDir) {
+                    return ToolResponse.error(
+                            "Cannot create project in current directory: it contains non-hidden files. "
+                                    + "Use an empty directory or remove existing files first.");
+                }
+                createInPlace = false;
+            }
+
             List<String> command = buildCommand(outDir, resolvedGroupId, resolvedArtifactId, extensions, buildTool,
                     resolvedVersion);
             LOG.infof("Creating Quarkus app: %s", String.join(" ", command));
@@ -118,7 +135,15 @@ public class CreateTools {
                 return ToolResponse.error("Project creation failed (exit " + exitCode + "):\n" + output);
             }
 
-            String projectDir = new File(outDir, resolvedArtifactId).getAbsolutePath();
+            String projectDir;
+            if (createInPlace) {
+                File subDir = new File(outDir, resolvedArtifactId);
+                moveContentsUp(subDir, outDir);
+                projectDir = outDir.getAbsolutePath();
+                LOG.infof("Created project in-place at: %s", projectDir);
+            } else {
+                projectDir = new File(outDir, resolvedArtifactId).getAbsolutePath();
+            }
 
             // Ensure rest-assured is available for testing (--no-code skips it)
             addRestAssuredIfMissing(projectDir);
@@ -401,6 +426,37 @@ public class CreateTools {
         } catch (IOException e) {
             LOG.debugf("Failed to add rest-assured dependency: %s", e.getMessage());
         }
+    }
+
+    private boolean shouldCreateInPlace(Boolean createInCurrentDir, File outDir, String artifactId) {
+        if (createInCurrentDir != null) {
+            return createInCurrentDir;
+        }
+        return outDir.getName().equals(artifactId);
+    }
+
+    private boolean isDirectoryEmptyEnough(File dir) {
+        File[] files = dir.listFiles();
+        if (files == null) {
+            return true;
+        }
+        for (File f : files) {
+            if (!f.getName().startsWith(".")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void moveContentsUp(File subDir, File targetDir) throws IOException {
+        File[] files = subDir.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                Files.move(file.toPath(), targetDir.toPath().resolve(file.getName()),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
+        Files.delete(subDir.toPath());
     }
 
     private void generateProjectInstructions(String projectDir, String extensions) {
