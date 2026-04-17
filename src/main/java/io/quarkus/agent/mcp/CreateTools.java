@@ -452,10 +452,11 @@ public class CreateTools {
         File[] files = subDir.listFiles();
         if (files != null) {
             for (File file : files) {
-                Files.move(file.toPath(), targetDir.toPath().resolve(file.getName()));
+                Files.move(file.toPath(), targetDir.toPath().resolve(file.getName()),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             }
         }
-        Files.deleteIfExists(subDir.toPath());
+        Files.delete(subDir.toPath());
     }
 
     private void generateProjectInstructions(String projectDir, String extensions) {

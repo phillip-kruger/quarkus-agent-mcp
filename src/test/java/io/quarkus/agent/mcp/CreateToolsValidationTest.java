@@ -139,6 +139,21 @@ class CreateToolsValidationTest {
         assertFalse(Files.exists(subDir), "subdirectory should be removed");
     }
 
+    @Test
+    void moveContentsUp_replacesExistingDotfiles(@TempDir Path tempDir) throws IOException {
+        Files.writeString(tempDir.resolve(".gitignore"), "old-content");
+
+        Path subDir = Files.createDirectory(tempDir.resolve("my-app"));
+        Files.writeString(subDir.resolve(".gitignore"), "project-content");
+        Files.writeString(subDir.resolve("pom.xml"), "<project/>");
+
+        moveContentsUp(subDir.toFile(), tempDir.toFile());
+
+        assertEquals("project-content", Files.readString(tempDir.resolve(".gitignore")));
+        assertTrue(Files.exists(tempDir.resolve("pom.xml")));
+        assertFalse(Files.exists(subDir), "subdirectory should be removed");
+    }
+
     private static boolean shouldCreateInPlace(Boolean createInCurrentDir, File outDir, String artifactId) {
         if (createInCurrentDir != null) {
             return createInCurrentDir;
@@ -163,10 +178,11 @@ class CreateToolsValidationTest {
         File[] files = subDir.listFiles();
         if (files != null) {
             for (File file : files) {
-                Files.move(file.toPath(), targetDir.toPath().resolve(file.getName()));
+                Files.move(file.toPath(), targetDir.toPath().resolve(file.getName()),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             }
         }
-        Files.deleteIfExists(subDir.toPath());
+        Files.delete(subDir.toPath());
     }
 
     @Test
