@@ -1,12 +1,10 @@
 package io.quarkus.agent.mcp;
 
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.inject.Produces;
-
-import org.jboss.logging.Logger;
-
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.model.embedding.onnx.bgesmallenv15q.BgeSmallEnV15QuantizedEmbeddingModel;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Produces;
+import org.jboss.logging.Logger;
 
 /**
  * Produces the BGE Small EN v1.5 embedding model as a CDI bean.

@@ -1,16 +1,13 @@
 package io.quarkus.agent.mcp;
 
+import jakarta.annotation.PreDestroy;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import java.io.File;
 import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-
-import jakarta.annotation.PreDestroy;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
-
 import org.eclipse.microprofile.context.ManagedExecutor;
 import org.jboss.logging.Logger;
 
@@ -28,7 +25,13 @@ public class QuarkusProcessManager {
     @Inject
     ManagedExecutor executor;
 
+    private static final java.util.Set<String> VALID_BUILD_TOOLS = java.util.Set.of("maven", "gradle");
+
     public synchronized void start(String projectDir, String buildTool) {
+        if (buildTool != null && !VALID_BUILD_TOOLS.contains(buildTool.toLowerCase())) {
+            throw new IllegalArgumentException(
+                    "Invalid build tool: '" + buildTool + "'. Must be 'maven' or 'gradle'.");
+        }
         String normalizedDir = normalize(projectDir);
 
         QuarkusInstance existing = instances.get(normalizedDir);
@@ -152,7 +155,7 @@ public class QuarkusProcessManager {
         String mvnCmd;
         File wrapper = isWindows() ? new File(projectDir, "mvnw.cmd") : new File(projectDir, "mvnw");
         if (wrapper.exists()) {
-            warnIfUntrustedWrapper(wrapper);
+            verifyTrustedWrapper(wrapper);
             mvnCmd = isWindows() ? "mvnw.cmd" : "./mvnw";
         } else {
             mvnCmd = "mvn";
@@ -165,7 +168,7 @@ public class QuarkusProcessManager {
         String gradleCmd;
         File wrapper = isWindows() ? new File(projectDir, "gradlew.bat") : new File(projectDir, "gradlew");
         if (wrapper.exists()) {
-            warnIfUntrustedWrapper(wrapper);
+            verifyTrustedWrapper(wrapper);
             gradleCmd = isWindows() ? "gradlew.bat" : "./gradlew";
         } else {
             gradleCmd = "gradle";
@@ -175,10 +178,10 @@ public class QuarkusProcessManager {
     }
 
     /**
-     * Warn if the wrapper script is not tracked by git (could be malicious).
-     * A wrapper in a git repo that's been committed is considered trusted.
+     * Verify the wrapper script is tracked by git (considered trusted).
+     * Throws if the wrapper is untracked or cannot be verified.
      */
-    private void warnIfUntrustedWrapper(File wrapper) {
+    private void verifyTrustedWrapper(File wrapper) {
         try {
             Process p = new ProcessBuilder("git", "ls-files", "--error-unmatch", wrapper.getName())
                     .directory(wrapper.getParentFile())
@@ -187,12 +190,15 @@ public class QuarkusProcessManager {
             p.getInputStream().transferTo(java.io.OutputStream.nullOutputStream());
             int exit = p.waitFor();
             if (exit != 0) {
-                LOG.warnf("WARNING: Wrapper script '%s' is NOT tracked by git. "
-                        + "It could be malicious. Verify before proceeding.", wrapper.getAbsolutePath());
+                throw new IllegalStateException(
+                        "Wrapper script '" + wrapper.getAbsolutePath() + "' is NOT tracked by git. "
+                                + "It could be malicious. Add it to git or use the system-installed build tool.");
             }
+        } catch (IllegalStateException e) {
+            throw e;
         } catch (Exception e) {
-            LOG.warnf("WARNING: Could not verify wrapper script '%s' against git. "
-                    + "Ensure it is trusted before proceeding.", wrapper.getAbsolutePath());
+            LOG.warnf("Could not verify wrapper script '%s' against git: %s. "
+                    + "Falling back to system build tool.", wrapper.getAbsolutePath(), e.getMessage());
         }
     }
 

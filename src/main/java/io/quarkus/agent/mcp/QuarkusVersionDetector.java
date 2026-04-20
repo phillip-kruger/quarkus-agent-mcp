@@ -7,7 +7,6 @@ import java.nio.file.Files;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
 import org.jboss.logging.Logger;
 
 /**
@@ -16,9 +15,12 @@ import org.jboss.logging.Logger;
  * to prevent injection via crafted build files.
  * Results are cached per project directory to avoid re-reading build files on every call.
  */
-public class QuarkusVersionDetector {
+public final class QuarkusVersionDetector {
 
     private static final Logger LOG = Logger.getLogger(QuarkusVersionDetector.class);
+
+    private QuarkusVersionDetector() {
+    }
 
     // Cache: projectDir -> detected version (null values stored as empty string)
     private static final ConcurrentHashMap<String, String> VERSION_CACHE = new ConcurrentHashMap<>();
@@ -59,6 +61,12 @@ public class QuarkusVersionDetector {
         String version = doDetect(projectDir);
         VERSION_CACHE.put(projectDir, version != null ? version : NULL_SENTINEL);
         return version;
+    }
+
+    public static void invalidate(String projectDir) {
+        if (projectDir != null) {
+            VERSION_CACHE.remove(projectDir);
+        }
     }
 
     private static String doDetect(String projectDir) {

@@ -1,15 +1,13 @@
 package io.quarkus.agent.mcp;
 
-import java.util.Map;
-
-import jakarta.inject.Inject;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import io.quarkiverse.mcp.server.Tool;
 import io.quarkiverse.mcp.server.ToolArg;
 import io.quarkiverse.mcp.server.ToolResponse;
+import jakarta.inject.Inject;
+import java.util.Map;
+import org.jboss.logging.Logger;
 
 /**
  * MCP tools for managing Quarkus application lifecycle.
@@ -17,6 +15,8 @@ import io.quarkiverse.mcp.server.ToolResponse;
  * and monitor Quarkus applications running in dev mode.
  */
 public class LifecycleTools {
+
+    private static final Logger LOG = Logger.getLogger(LifecycleTools.class);
 
     @Inject
     QuarkusProcessManager processManager;
@@ -34,6 +34,7 @@ public class LifecycleTools {
             processManager.start(projectDir, buildTool);
             return ToolResponse.success("Quarkus application starting in dev mode at: " + projectDir);
         } catch (Exception e) {
+            LOG.error("Failed to start Quarkus application at " + projectDir, e);
             return ToolResponse.error(e.getMessage());
         }
     }
@@ -46,6 +47,7 @@ public class LifecycleTools {
             processManager.stop(projectDir);
             return ToolResponse.success("Quarkus application stopped at: " + projectDir);
         } catch (Exception e) {
+            LOG.error("Failed to stop Quarkus application at " + projectDir, e);
             return ToolResponse.error(e.getMessage());
         }
     }
@@ -58,6 +60,7 @@ public class LifecycleTools {
             processManager.restart(projectDir);
             return ToolResponse.success("Quarkus application restart triggered at: " + projectDir);
         } catch (Exception e) {
+            LOG.error("Failed to restart Quarkus application at " + projectDir, e);
             return ToolResponse.error(e.getMessage());
         }
     }
@@ -79,6 +82,7 @@ public class LifecycleTools {
             }
             return ToolResponse.success(status);
         } catch (Exception e) {
+            LOG.error("Failed to get status for " + projectDir, e);
             return ToolResponse.error(e.getMessage());
         }
     }
@@ -98,6 +102,7 @@ public class LifecycleTools {
             int count = (lines != null && lines > 0) ? Math.min(lines, 10000) : 50;
             return ToolResponse.success(instance.getRecentLogs(count));
         } catch (Exception e) {
+            LOG.error("Failed to get logs for " + projectDir, e);
             return ToolResponse.error(e.getMessage());
         }
     }

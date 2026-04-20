@@ -1,25 +1,21 @@
 package io.quarkus.agent.mcp;
 
-import java.io.BufferedReader;
+import io.quarkiverse.mcp.server.Tool;
+import io.quarkiverse.mcp.server.ToolArg;
+import io.quarkiverse.mcp.server.ToolResponse;
+import jakarta.inject.Inject;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
-
-import jakarta.inject.Inject;
-
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
-
-import io.quarkiverse.mcp.server.Tool;
-import io.quarkiverse.mcp.server.ToolArg;
-import io.quarkiverse.mcp.server.ToolResponse;
 
 /**
  * MCP tool for creating new Quarkus applications.
@@ -125,8 +121,12 @@ public class CreateTools {
             String output;
             int exitCode;
             try {
-                output = captureOutput(process);
-                exitCode = process.waitFor();
+                output = ProcessUtils.captureOutput(process);
+                if (!process.waitFor(10, TimeUnit.MINUTES)) {
+                    process.destroyForcibly();
+                    return ToolResponse.error("Project creation timed out after 10 minutes.");
+                }
+                exitCode = process.exitValue();
             } finally {
                 process.destroyForcibly();
             }
@@ -230,32 +230,18 @@ public class CreateTools {
 
     private List<String> buildQuarkusCliCommand(String quarkusCmd, String groupId, String artifactId,
             String extensions, String buildTool, String quarkusVersion) {
-        List<String> cmd = new ArrayList<>();
-        cmd.add(quarkusCmd);
-        cmd.add("create");
-        cmd.add("app");
-        cmd.add(groupId + ":" + artifactId);
-        cmd.add("--no-code");
-        cmd.add("--batch-mode");
-
-        if (quarkusVersion != null && !quarkusVersion.isBlank()) {
-            cmd.add("--platform-bom=io.quarkus:quarkus-bom:" + quarkusVersion);
-        }
-        if (extensions != null && !extensions.isBlank()) {
-            cmd.add("--extension=" + extensions);
-        }
-        if ("gradle".equalsIgnoreCase(buildTool)) {
-            cmd.add("--gradle");
-        }
-
-        return cmd;
+        return buildCliStyleCommand(List.of(quarkusCmd), groupId, artifactId, extensions, buildTool, quarkusVersion);
     }
 
     private List<String> buildJBangCommand(String groupId, String artifactId,
             String extensions, String buildTool, String quarkusVersion) {
-        List<String> cmd = new ArrayList<>();
-        cmd.add("jbang");
-        cmd.add("quarkus@quarkusio");
+        return buildCliStyleCommand(List.of("jbang", "quarkus@quarkusio"), groupId, artifactId, extensions, buildTool,
+                quarkusVersion);
+    }
+
+    private List<String> buildCliStyleCommand(List<String> prefix, String groupId, String artifactId,
+            String extensions, String buildTool, String quarkusVersion) {
+        List<String> cmd = new ArrayList<>(prefix);
         cmd.add("create");
         cmd.add("app");
         cmd.add(groupId + ":" + artifactId);
@@ -306,33 +292,7 @@ public class CreateTools {
     }
 
     private boolean isCommandAvailable(String command) {
-        Process p = null;
-        try {
-            p = new ProcessBuilder("which", command)
-                    .redirectErrorStream(true)
-                    .start();
-            p.getInputStream().transferTo(java.io.OutputStream.nullOutputStream());
-            return p.waitFor() == 0;
-        } catch (Exception e) {
-            return false;
-        } finally {
-            if (p != null) {
-                p.destroyForcibly();
-            }
-        }
-    }
-
-    private String captureOutput(Process process) throws IOException {
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                sb.append(line).append("\n");
-                LOG.debug(line);
-            }
-            return sb.toString().trim();
-        }
+        return ProcessUtils.isCommandAvailable(command);
     }
 
     private void createSourceDirectories(String projectDir) {
@@ -344,7 +304,7 @@ public class CreateTools {
             Files.createDirectories(base.resolve("src/test/resources"));
             LOG.debugf("Ensured source directories exist in %s", projectDir);
         } catch (IOException e) {
-            LOG.debugf("Failed to create source directories: %s", e.getMessage());
+            LOG.warnf("Failed to create source directories in %s: %s", projectDir, e.getMessage());
         }
     }
 
@@ -383,7 +343,7 @@ public class CreateTools {
                 LOG.debugf("Added rest-assured test dependency to %s", pomPath);
             }
         } catch (IOException e) {
-            LOG.debugf("Failed to add rest-assured dependency: %s", e.getMessage());
+            LOG.warnf("Failed to add rest-assured dependency to %s: %s", pomPath, e.getMessage());
         }
     }
 
@@ -424,7 +384,7 @@ public class CreateTools {
             Files.writeString(buildFile, content, StandardCharsets.UTF_8);
             LOG.debugf("Added rest-assured test dependency to %s", buildFile);
         } catch (IOException e) {
-            LOG.debugf("Failed to add rest-assured dependency: %s", e.getMessage());
+            LOG.warnf("Failed to add rest-assured dependency to %s: %s", buildFile, e.getMessage());
         }
     }
 
@@ -555,7 +515,7 @@ public class CreateTools {
             Files.writeString(Path.of(projectDir, "CLAUDE.md"), claudeMdContent, StandardCharsets.UTF_8);
             LOG.debugf("Generated CLAUDE.md in %s", projectDir);
         } catch (IOException e) {
-            LOG.debugf("Failed to generate AGENTS.md: %s", e.getMessage());
+            LOG.warnf("Failed to generate AGENTS.md in %s: %s", projectDir, e.getMessage());
         }
     }
 }

@@ -1,8 +1,14 @@
 package io.quarkus.agent.mcp;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.quarkiverse.mcp.server.Tool;
+import io.quarkiverse.mcp.server.ToolArg;
+import io.quarkiverse.mcp.server.ToolResponse;
+import jakarta.inject.Inject;
 import java.io.IOException;
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
@@ -13,18 +19,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
-
-import jakarta.inject.Inject;
-
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import io.quarkiverse.mcp.server.Tool;
-import io.quarkiverse.mcp.server.ToolArg;
-import io.quarkiverse.mcp.server.ToolResponse;
+import org.jboss.logging.Logger;
 
 /**
  * MCP tools that proxy requests to a running Quarkus application's Dev MCP server.
@@ -32,11 +28,11 @@ import io.quarkiverse.mcp.server.ToolResponse;
  */
 public class DevMcpProxyTools {
 
-    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
+    private static final Logger LOG = Logger.getLogger(DevMcpProxyTools.class);
+
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
 
-
-    private static final AtomicLong REQUEST_ID = new AtomicLong(0);
+    private final AtomicLong requestId = new AtomicLong(0);
 
     // --- Startup / build polling ---
     private static final int STARTUP_WAIT_SECONDS = 120;
@@ -80,6 +76,7 @@ public class DevMcpProxyTools {
         } catch (JsonProcessingException e) {
             return ToolResponse.error("Failed to serialize tools: " + e.getMessage());
         } catch (Exception e) {
+            LOG.error("Failed to search Dev MCP tools for " + projectDir, e);
             return ToolResponse.error(e.getMessage());
         }
     }
@@ -156,6 +153,7 @@ public class DevMcpProxyTools {
             }
             return ToolResponse.success(sb.toString());
         } catch (Exception e) {
+            LOG.error("Failed to read skills for " + projectDir, e);
             return ToolResponse.error("Failed to read skills: " + e.getMessage());
         }
     }
@@ -250,6 +248,7 @@ public class DevMcpProxyTools {
 
             return result;
         } catch (Exception e) {
+            LOG.error("Failed to call Dev MCP tool '" + toolName + "' for " + projectDir, e);
             return ToolResponse.error(e.getMessage());
         }
     }
@@ -367,7 +366,7 @@ public class DevMcpProxyTools {
         try {
             String jsonRpcRequest = mapper.writeValueAsString(Map.of(
                     "jsonrpc", "2.0",
-                    "id", REQUEST_ID.incrementAndGet(),
+                    "id", requestId.incrementAndGet(),
                     "method", method,
                     "params", params));
 
