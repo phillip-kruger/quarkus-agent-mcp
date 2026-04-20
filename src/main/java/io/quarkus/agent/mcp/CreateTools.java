@@ -120,13 +120,25 @@ public class CreateTools {
             Process process = pb.start();
             String output;
             int exitCode;
+            StringBuilder outputCapture = new StringBuilder();
+            Thread captureThread = new Thread(() -> {
+                try {
+                    outputCapture.append(ProcessUtils.captureOutput(process));
+                } catch (IOException e) {
+                    LOG.debugf("Error capturing process output: %s", e.getMessage());
+                }
+            }, "create-output-capture");
+            captureThread.setDaemon(true);
+            captureThread.start();
             try {
-                output = ProcessUtils.captureOutput(process);
                 if (!process.waitFor(10, TimeUnit.MINUTES)) {
                     process.destroyForcibly();
+                    captureThread.join(5000);
                     return ToolResponse.error("Project creation timed out after 10 minutes.");
                 }
+                captureThread.join(5000);
                 exitCode = process.exitValue();
+                output = outputCapture.toString();
             } finally {
                 process.destroyForcibly();
             }
@@ -515,7 +527,7 @@ public class CreateTools {
             Files.writeString(Path.of(projectDir, "CLAUDE.md"), claudeMdContent, StandardCharsets.UTF_8);
             LOG.debugf("Generated CLAUDE.md in %s", projectDir);
         } catch (IOException e) {
-            LOG.warnf("Failed to generate AGENTS.md in %s: %s", projectDir, e.getMessage());
+            LOG.warnf("Failed to generate project instructions in %s: %s", projectDir, e.getMessage());
         }
     }
 }

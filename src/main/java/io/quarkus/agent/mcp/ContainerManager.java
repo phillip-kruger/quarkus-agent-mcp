@@ -107,8 +107,12 @@ public class ContainerManager {
         return container;
     }
 
+    /**
+     * Releases container references without stopping them — containers use {@code withReuse(true)}
+     * so they persist across MCP server restarts.
+     */
     @PreDestroy
-    void shutdown() {
+    void releaseContainerReferences() {
         for (var entry : containers.entrySet()) {
             try {
                 LOG.infof("Releasing container reference for version %s (containerId: %s)",

@@ -71,8 +71,8 @@ public class QuarkusInstance {
     private void monitorExit() {
         try {
             int exitCode = process.waitFor();
-            if (status.get() != Status.STOPPED) {
-                status.set(Status.CRASHED);
+            if (status.compareAndSet(Status.STARTING, Status.CRASHED)
+                    || status.compareAndSet(Status.RUNNING, Status.CRASHED)) {
                 appendLog("[mcp] Process exited with code: " + exitCode);
             }
         } catch (InterruptedException e) {

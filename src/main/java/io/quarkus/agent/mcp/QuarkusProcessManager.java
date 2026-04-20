@@ -7,6 +7,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.eclipse.microprofile.context.ManagedExecutor;
 import org.jboss.logging.Logger;
@@ -25,7 +26,7 @@ public class QuarkusProcessManager {
     @Inject
     ManagedExecutor executor;
 
-    private static final java.util.Set<String> VALID_BUILD_TOOLS = java.util.Set.of("maven", "gradle");
+    private static final Set<String> VALID_BUILD_TOOLS = Set.of("maven", "gradle");
 
     public synchronized void start(String projectDir, String buildTool) {
         if (buildTool != null && !VALID_BUILD_TOOLS.contains(buildTool.toLowerCase())) {
@@ -154,8 +155,7 @@ public class QuarkusProcessManager {
     private ProcessBuilder createMavenProcessBuilder(File projectDir) {
         String mvnCmd;
         File wrapper = isWindows() ? new File(projectDir, "mvnw.cmd") : new File(projectDir, "mvnw");
-        if (wrapper.exists()) {
-            verifyTrustedWrapper(wrapper);
+        if (wrapper.exists() && verifyTrustedWrapper(wrapper)) {
             mvnCmd = isWindows() ? "mvnw.cmd" : "./mvnw";
         } else {
             mvnCmd = "mvn";
@@ -167,8 +167,7 @@ public class QuarkusProcessManager {
     private ProcessBuilder createGradleProcessBuilder(File projectDir) {
         String gradleCmd;
         File wrapper = isWindows() ? new File(projectDir, "gradlew.bat") : new File(projectDir, "gradlew");
-        if (wrapper.exists()) {
-            verifyTrustedWrapper(wrapper);
+        if (wrapper.exists() && verifyTrustedWrapper(wrapper)) {
             gradleCmd = isWindows() ? "gradlew.bat" : "./gradlew";
         } else {
             gradleCmd = "gradle";
@@ -178,10 +177,11 @@ public class QuarkusProcessManager {
     }
 
     /**
-     * Verify the wrapper script is tracked by git (considered trusted).
-     * Throws if the wrapper is untracked or cannot be verified.
+     * Returns true if the wrapper is tracked by git (trusted), false if verification
+     * failed and the caller should fall back to the system build tool.
+     * Throws if the wrapper is explicitly untracked (potential supply-chain attack).
      */
-    private void verifyTrustedWrapper(File wrapper) {
+    private boolean verifyTrustedWrapper(File wrapper) {
         try {
             Process p = new ProcessBuilder("git", "ls-files", "--error-unmatch", wrapper.getName())
                     .directory(wrapper.getParentFile())
@@ -194,11 +194,13 @@ public class QuarkusProcessManager {
                         "Wrapper script '" + wrapper.getAbsolutePath() + "' is NOT tracked by git. "
                                 + "It could be malicious. Add it to git or use the system-installed build tool.");
             }
+            return true;
         } catch (IllegalStateException e) {
             throw e;
         } catch (Exception e) {
             LOG.warnf("Could not verify wrapper script '%s' against git: %s. "
                     + "Falling back to system build tool.", wrapper.getAbsolutePath(), e.getMessage());
+            return false;
         }
     }
 
