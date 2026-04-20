@@ -1,9 +1,8 @@
 package io.quarkus.agent.mcp;
 
-import java.util.concurrent.ConcurrentHashMap;
-
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
-
+import java.util.concurrent.ConcurrentHashMap;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 import org.testcontainers.containers.GenericContainer;
@@ -106,6 +105,23 @@ public class ContainerManager {
                     "pgvector container is not running for version " + tag + ". Call ensureRunning() first.");
         }
         return container;
+    }
+
+    /**
+     * Releases container references without stopping them — containers use {@code withReuse(true)}
+     * so they persist across MCP server restarts.
+     */
+    @PreDestroy
+    void releaseContainerReferences() {
+        for (var entry : containers.entrySet()) {
+            try {
+                LOG.infof("Releasing container reference for version %s (containerId: %s)",
+                        entry.getKey(), entry.getValue().getContainerId());
+            } catch (Exception e) {
+                LOG.debugf("Error during container cleanup for %s: %s", entry.getKey(), e.getMessage());
+            }
+        }
+        containers.clear();
     }
 
     private String resolveImageTag(String quarkusVersion) {

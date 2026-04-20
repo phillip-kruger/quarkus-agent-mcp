@@ -103,7 +103,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 Download the uber-jar from the [latest GitHub Release](https://github.com/quarkusio/quarkus-agent-mcp/releases/latest), then:
 
 ```bash
-claude mcp add quarkus-agent -- java -jar /path/to/quarkus-agent-mcp-0.0.5-runner.jar
+claude mcp add quarkus-agent -- java -jar /path/to/quarkus-agent-mcp-runner.jar
 ```
 
 ### Build from source
@@ -117,7 +117,7 @@ cd quarkus-agent-mcp
 This produces the uber-jar at `target/quarkus-agent-mcp-1.0.0-SNAPSHOT-runner.jar` (version may vary).
 
 ```bash
-claude mcp add quarkus-agent -- java -jar /path/to/quarkus-agent-mcp/target/quarkus-agent-mcp-*-runner.jar
+claude mcp add quarkus-agent -- java -jar /path/to/quarkus-agent-mcp/target/quarkus-agent-mcp-<version>-runner.jar
 ```
 
 #### Verify

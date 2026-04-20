@@ -3,7 +3,6 @@ package io.quarkus.agent.mcp;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -15,6 +14,7 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,9 +23,7 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
 import javax.xml.parsers.DocumentBuilderFactory;
-
 import org.jboss.logging.Logger;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -53,6 +51,7 @@ public final class SkillReader {
     private static final String SKILL_FILE_NAME = "SKILL.md";
     private static final String SKILLS_ARTIFACT_ID = "quarkus-extension-skills";
     private static final String MAVEN_CENTRAL_BASE = "https://repo1.maven.org/maven2";
+    private static final Pattern VALID_SKILL_NAME = Pattern.compile("^[a-zA-Z0-9._-]+$");
     private static final Pattern FRONTMATTER_NAME = Pattern.compile("^name:\\s*(.+)$", Pattern.MULTILINE);
     private static final Pattern FRONTMATTER_DESC = Pattern.compile("^description:\\s*\"(.+)\"$", Pattern.MULTILINE);
     private static final Pattern FRONTMATTER_MODE = Pattern.compile("^mode:\\s*(\\S+)", Pattern.MULTILINE);
@@ -116,7 +115,7 @@ public final class SkillReader {
                         skillsByName.put(skill.name(), skill);
                     }
                 } catch (IOException e) {
-                    LOG.debugf("Failed to read skills from %s: %s", jarPath, e.getMessage());
+                    LOG.warnf("Failed to read skills from %s: %s", jarPath, e.getMessage());
                 }
             }
         } else {
@@ -237,7 +236,7 @@ public final class SkillReader {
 
         List<SkillInfo> skills = new ArrayList<>();
         try {
-            Files.walkFileTree(skillsDir, new SimpleFileVisitor<>() {
+            Files.walkFileTree(skillsDir, Collections.emptySet(), 3, new SimpleFileVisitor<>() {
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
                     if (file.getFileName().toString().equals(SKILL_FILE_NAME)) {
@@ -274,8 +273,9 @@ public final class SkillReader {
      */
     static Path writeSkill(String skillName, String content, String description,
             SkillMode mode, String projectDir, Path localSkillsDir, boolean projectScope) throws IOException {
-        if (skillName == null || skillName.contains("/") || skillName.contains("\\") || skillName.contains("..")) {
-            throw new IllegalArgumentException("Invalid skill name: " + skillName);
+        if (skillName == null || !VALID_SKILL_NAME.matcher(skillName).matches()) {
+            throw new IllegalArgumentException("Invalid skill name: " + skillName
+                    + ". Must contain only letters, digits, dots, hyphens, and underscores.");
         }
 
         Path baseDir;
@@ -488,7 +488,7 @@ public final class SkillReader {
                 }
             }
         } catch (Exception e) {
-            LOG.debugf("Failed to parse settings.xml at %s: %s", settingsFile, e.getMessage());
+            LOG.warnf("Failed to parse settings.xml at %s: %s", settingsFile, e.getMessage());
         }
         return null;
     }

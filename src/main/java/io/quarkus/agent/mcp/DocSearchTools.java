@@ -1,19 +1,7 @@
 package io.quarkus.agent.mcp;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
-import jakarta.inject.Inject;
-
-import org.eclipse.microprofile.config.inject.ConfigProperty;
-import org.jboss.logging.Logger;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
@@ -24,6 +12,14 @@ import dev.langchain4j.store.embedding.pgvector.PgVectorEmbeddingStore;
 import io.quarkiverse.mcp.server.Tool;
 import io.quarkiverse.mcp.server.ToolArg;
 import io.quarkiverse.mcp.server.ToolResponse;
+import jakarta.inject.Inject;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.jboss.logging.Logger;
 
 /**
  * MCP tool for semantic search over Quarkus documentation.
@@ -88,6 +84,9 @@ public class DocSearchTools {
     @Inject
     ObjectMapper mapper;
 
+    private static final String DEFAULT_VERSION_KEY = "__default__";
+
+    private final Object initLock = new Object();
     private final ConcurrentHashMap<String, PgVectorEmbeddingStore> embeddingStores = new ConcurrentHashMap<>();
 
     @Tool(name = "quarkus/searchDocs", description = "Search Quarkus documentation. "
@@ -158,14 +157,14 @@ public class DocSearchTools {
     }
 
     private PgVectorEmbeddingStore ensureInitialized(String quarkusVersion) {
-        String key = quarkusVersion != null ? quarkusVersion : "__default__";
+        String key = quarkusVersion != null ? quarkusVersion : DEFAULT_VERSION_KEY;
 
         PgVectorEmbeddingStore existing = embeddingStores.get(key);
         if (existing != null) {
             return existing;
         }
 
-        synchronized (this) {
+        synchronized (initLock) {
             // Double-check after acquiring lock
             existing = embeddingStores.get(key);
             if (existing != null) {

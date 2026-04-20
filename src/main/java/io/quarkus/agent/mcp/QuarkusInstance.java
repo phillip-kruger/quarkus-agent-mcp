@@ -10,7 +10,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import org.jboss.logging.Logger;
 
 /**
  * Represents a single managed Quarkus dev mode instance.
@@ -19,6 +21,8 @@ import java.util.stream.Collectors;
  */
 public class QuarkusInstance {
 
+    private static final Logger LOG = Logger.getLogger(QuarkusInstance.class);
+
     public enum Status {
         STARTING,
         RUNNING,
@@ -26,12 +30,12 @@ public class QuarkusInstance {
         STOPPED
     }
 
-    private static final int MAX_LOG_LINES = 500;
+    static final int MAX_LOG_LINES = 500;
 
     private final String projectDir;
     private final Process process;
     private final LinkedList<String> logBuffer = new LinkedList<>();
-    private volatile Status status = Status.STARTING;
+    private final AtomicReference<Status> status = new AtomicReference<>(Status.STARTING);
     private volatile int httpPort = -1;
 
     public QuarkusInstance(String projectDir, Process process, ExecutorService executor) {
@@ -53,20 +57,22 @@ public class QuarkusInstance {
                 if (line.contains("Listening on:")) {
                     parsePort(line);
                 }
-                if (status == Status.STARTING && isStartedLine(line)) {
-                    status = Status.RUNNING;
+                if (status.get() == Status.STARTING && isStartedLine(line)) {
+                    status.compareAndSet(Status.STARTING, Status.RUNNING);
                 }
             }
         } catch (IOException e) {
-            // Stream closed — expected on process termination
+            if (process.isAlive()) {
+                LOG.warnf("Log capture stream closed unexpectedly while process is still alive: %s", e.getMessage());
+            }
         }
     }
 
     private void monitorExit() {
         try {
             int exitCode = process.waitFor();
-            if (status != Status.STOPPED) {
-                status = Status.CRASHED;
+            if (status.compareAndSet(Status.STARTING, Status.CRASHED)
+                    || status.compareAndSet(Status.RUNNING, Status.CRASHED)) {
                 appendLog("[mcp] Process exited with code: " + exitCode);
             }
         } catch (InterruptedException e) {
@@ -86,7 +92,6 @@ public class QuarkusInstance {
         if (idx >= 0) {
             try {
                 String url = line.substring(idx).trim();
-                // Remove trailing non-URL characters (e.g. log suffixes)
                 int spaceIdx = url.indexOf(' ');
                 if (spaceIdx > 0) {
                     url = url.substring(0, spaceIdx);
@@ -96,7 +101,7 @@ public class QuarkusInstance {
                     httpPort = port;
                 }
             } catch (IllegalArgumentException e) {
-                // ignore malformed URLs
+                LOG.warnf("Failed to parse URL from log line: %s", line);
             }
         }
     }
@@ -113,10 +118,14 @@ public class QuarkusInstance {
     }
 
     public Status getStatus() {
-        if (status == Status.RUNNING && !process.isAlive()) {
-            status = Status.CRASHED;
+        reconcileStatus();
+        return status.get();
+    }
+
+    private void reconcileStatus() {
+        if (status.get() == Status.RUNNING && !process.isAlive()) {
+            status.compareAndSet(Status.RUNNING, Status.CRASHED);
         }
-        return status;
     }
 
     public synchronized String getRecentLogs(int lines) {
@@ -142,16 +151,20 @@ public class QuarkusInstance {
             throw new IllegalStateException(
                     "Process is not running. Use quarkus/start to start a new instance.");
         }
-        status = Status.STARTING;
+        status.set(Status.STARTING);
         httpPort = -1;
         sendInput('s');
     }
 
     public void stop() {
-        status = Status.STOPPED;
+        status.set(Status.STOPPED);
         if (process.isAlive()) {
             try {
                 sendInput('q');
+            } catch (RuntimeException e) {
+                LOG.debugf("Could not send quit signal (stdin may be closed): %s", e.getMessage());
+            }
+            try {
                 if (!process.waitFor(5, TimeUnit.SECONDS)) {
                     process.destroyForcibly();
                 }

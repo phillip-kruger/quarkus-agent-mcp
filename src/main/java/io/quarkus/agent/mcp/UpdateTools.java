@@ -1,11 +1,13 @@
 package io.quarkus.agent.mcp;
 
+import io.quarkiverse.mcp.server.Tool;
+import io.quarkiverse.mcp.server.ToolArg;
+import io.quarkiverse.mcp.server.ToolResponse;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -17,12 +19,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
 import org.jboss.logging.Logger;
-
-import io.quarkiverse.mcp.server.Tool;
-import io.quarkiverse.mcp.server.ToolArg;
-import io.quarkiverse.mcp.server.ToolResponse;
 
 /**
  * MCP tool for checking and updating Quarkus projects to the latest version.
@@ -222,7 +219,11 @@ public class UpdateTools {
             // Sort by semver and return the latest
             versions.sort(new SemverComparator());
             return versions.get(versions.size() - 1);
-        } catch (Exception e) {
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            LOG.debugf("Interrupted while fetching latest version");
+            return null;
+        } catch (IOException e) {
             LOG.debugf("Failed to fetch latest version: %s", e.getMessage());
             return null;
         }
@@ -316,20 +317,7 @@ public class UpdateTools {
     }
 
     private boolean isCommandAvailable(String command) {
-        Process p = null;
-        try {
-            p = new ProcessBuilder("which", command)
-                    .redirectErrorStream(true)
-                    .start();
-            p.getInputStream().transferTo(java.io.OutputStream.nullOutputStream());
-            return p.waitFor() == 0;
-        } catch (Exception e) {
-            return false;
-        } finally {
-            if (p != null) {
-                p.destroyForcibly();
-            }
-        }
+        return ProcessUtils.isCommandAvailable(command);
     }
 
     record BuildInfo(String buildTool, String tagPrefix, String buildFile, String version) {
