@@ -627,6 +627,120 @@ class SkillReaderTest {
         assertTrue(content.contains("description: \"A \\\"quoted\\\" description\""));
     }
 
+    // --- Metadata-only (lazy content) tests ---
+
+    @Test
+    void parseFrontmatterMetadataOnlyReturnsNullContent() {
+        String content = """
+                ---
+                name: quarkus-rest
+                description: "REST extension"
+                mode: enhance
+                ---
+
+                ### REST Endpoints
+                Use @Path and @GET for endpoints.
+                """;
+
+        SkillReader.SkillInfo info = SkillReader.parseFrontmatter(content, true);
+
+        assertEquals("quarkus-rest", info.name());
+        assertEquals("REST extension", info.description());
+        assertNull(info.content());
+        assertEquals(SkillReader.SkillMode.ENHANCE, info.mode());
+    }
+
+    @Test
+    void readSkillsFromJarMetadataOnlyReturnsNullContent() throws Exception {
+        Path jarPath = tempDir.resolve("skills.jar");
+        try (JarOutputStream jos = new JarOutputStream(new FileOutputStream(jarPath.toFile()))) {
+            jos.putNextEntry(new JarEntry("META-INF/skills/quarkus-rest/SKILL.md"));
+            jos.write("""
+                    ---
+                    name: quarkus-rest
+                    description: "REST extension"
+                    ---
+
+                    ### REST Endpoints
+                    Use @Path.
+                    """.getBytes(StandardCharsets.UTF_8));
+            jos.closeEntry();
+        }
+
+        List<SkillReader.SkillInfo> skills = SkillReader.readSkillsFromJar(jarPath, true);
+
+        assertEquals(1, skills.size());
+        assertEquals("quarkus-rest", skills.get(0).name());
+        assertEquals("REST extension", skills.get(0).description());
+        assertNull(skills.get(0).content());
+    }
+
+    @Test
+    void readLocalSkillsMetadataOnlyReturnsNullContent() throws Exception {
+        Path skillsDir = tempDir.resolve("skills");
+        Path restDir = skillsDir.resolve("quarkus-rest");
+        Files.createDirectories(restDir);
+        Files.writeString(restDir.resolve("SKILL.md"), """
+                ---
+                name: quarkus-rest
+                description: "Local REST skill"
+                ---
+
+                ### Local REST
+                Local content.
+                """);
+
+        List<SkillReader.SkillInfo> skills = SkillReader.readLocalSkills(skillsDir, true);
+
+        assertEquals(1, skills.size());
+        assertEquals("quarkus-rest", skills.get(0).name());
+        assertEquals("Local REST skill", skills.get(0).description());
+        assertNull(skills.get(0).content());
+    }
+
+    @Test
+    void enhanceModeMetadataOnlyMergesDescriptionNotContent() throws Exception {
+        Path jarPath = tempDir.resolve("skills.jar");
+        try (JarOutputStream jos = new JarOutputStream(new FileOutputStream(jarPath.toFile()))) {
+            jos.putNextEntry(new JarEntry("META-INF/skills/quarkus-rest/SKILL.md"));
+            jos.write("""
+                    ---
+                    name: quarkus-rest
+                    description: "Base description"
+                    ---
+
+                    ### Base content
+                    """.getBytes(StandardCharsets.UTF_8));
+            jos.closeEntry();
+        }
+
+        Path skillsDir = tempDir.resolve("local-skills/quarkus-rest");
+        Files.createDirectories(skillsDir);
+        Files.writeString(skillsDir.resolve("SKILL.md"), """
+                ---
+                name: quarkus-rest
+                description: "Enhanced description"
+                mode: enhance
+                ---
+
+                ### Enhanced content
+                """);
+
+        List<SkillReader.SkillInfo> base = SkillReader.readSkillsFromJar(jarPath, true);
+        java.util.Map<String, SkillReader.SkillInfo> skillMap = new java.util.LinkedHashMap<>();
+        for (SkillReader.SkillInfo s : base) {
+            skillMap.put(s.name(), s);
+        }
+
+        List<SkillReader.SkillInfo> local = SkillReader.readLocalSkills(tempDir.resolve("local-skills"), true);
+        SkillReader.overlaySkills(skillMap, local, "local-skills");
+
+        SkillReader.SkillInfo result = skillMap.get("quarkus-rest");
+        assertNotNull(result);
+        assertEquals("Enhanced description", result.description());
+        assertNull(result.content());
+    }
+
     @Test
     void skillModeFromStringDefaultsToEnhance() {
         assertEquals(SkillReader.SkillMode.ENHANCE, SkillReader.SkillMode.fromString(null));

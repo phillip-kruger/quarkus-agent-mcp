@@ -100,11 +100,16 @@ public class DevMcpProxyTools {
                     + "Examples: 'panache', 'rest', 'security', 'kafka'. "
                     + "If omitted, lists all available skills with their descriptions.", required = false) String query) {
         try {
-            List<SkillReader.SkillInfo> skills = SkillReader.readSkills(projectDir, localSkillsDir.map(Path::of).orElse(null));
+            Path effectiveLocalDir = localSkillsDir.map(Path::of).orElse(null);
+            String queryLower = (query != null && !query.isBlank()) ? query.toLowerCase() : null;
+            boolean needsContent = queryLower != null;
+
+            // When a query is provided we need full content; otherwise read metadata only
+            List<SkillReader.SkillInfo> skills = SkillReader.readSkills(projectDir, effectiveLocalDir, !needsContent);
 
             // If no skills found, check if the app is still building and wait for it
             if (skills.isEmpty()) {
-                skills = waitForBuildAndRetry(projectDir);
+                skills = waitForBuildAndRetry(projectDir, !needsContent);
             }
 
             if (skills.isEmpty()) {
@@ -112,8 +117,6 @@ public class DevMcpProxyTools {
                         "No extension skills found. Ensure the project has been built at least once "
                                 + "and uses Quarkus extensions that provide skill files.");
             }
-
-            String queryLower = (query != null && !query.isBlank()) ? query.toLowerCase() : null;
 
             // Filter by query if provided
             List<SkillReader.SkillInfo> matched = skills;
@@ -128,28 +131,34 @@ public class DevMcpProxyTools {
                 return ToolResponse.success("No skills found matching: " + query);
             }
 
-            // If query matched or only one skill, return full content
-            if (queryLower != null || matched.size() == 1) {
+            // Multiple skills and no query — return summary list (no content needed)
+            if (queryLower == null && matched.size() > 1) {
                 StringBuilder sb = new StringBuilder();
+                sb.append("Available extension skills (use query parameter to read a specific skill):\n\n");
                 for (SkillReader.SkillInfo skill : matched) {
-                    if (!sb.isEmpty()) {
-                        sb.append("\n---\n\n");
+                    sb.append("- **").append(skill.name()).append("**");
+                    if (skill.description() != null) {
+                        sb.append(": ").append(skill.description());
                     }
-                    sb.append("# ").append(skill.name()).append("\n\n");
-                    sb.append(skill.content());
+                    sb.append("\n");
                 }
                 return ToolResponse.success(sb.toString());
             }
 
-            // Multiple skills and no query — return summary list
+            // Single skill without query — we only read metadata, so re-read with content
+            if (!needsContent) {
+                skills = SkillReader.readSkills(projectDir, effectiveLocalDir, false);
+                matched = skills;
+            }
+
+            // Return full content for matched skills
             StringBuilder sb = new StringBuilder();
-            sb.append("Available extension skills (use query parameter to read a specific skill):\n\n");
             for (SkillReader.SkillInfo skill : matched) {
-                sb.append("- **").append(skill.name()).append("**");
-                if (skill.description() != null) {
-                    sb.append(": ").append(skill.description());
+                if (!sb.isEmpty()) {
+                    sb.append("\n---\n\n");
                 }
-                sb.append("\n");
+                sb.append("# ").append(skill.name()).append("\n\n");
+                sb.append(skill.content());
             }
             return ToolResponse.success(sb.toString());
         } catch (Exception e) {
@@ -162,7 +171,7 @@ public class DevMcpProxyTools {
      * If the app is still building (STARTING state), wait for it to reach RUNNING
      * so that deployment JARs are available in the local Maven repository, then retry.
      */
-    private List<SkillReader.SkillInfo> waitForBuildAndRetry(String projectDir) {
+    private List<SkillReader.SkillInfo> waitForBuildAndRetry(String projectDir, boolean metadataOnly) {
         QuarkusInstance instance = processManager.getInstance(projectDir);
         if (instance == null || instance.getStatus() != QuarkusInstance.Status.STARTING) {
             return List.of();
@@ -173,7 +182,7 @@ public class DevMcpProxyTools {
             return List.of();
         }
         // RUNNING or timed out (still STARTING) — try reading skills either way
-        return SkillReader.readSkills(projectDir, localSkillsDir.map(Path::of).orElse(null));
+        return SkillReader.readSkills(projectDir, localSkillsDir.map(Path::of).orElse(null), metadataOnly);
     }
 
     @Tool(name = "quarkus/updateSkill", description = "Create or update a skill customization for a Quarkus extension. "

@@ -84,7 +84,7 @@ public final class SkillReader {
      * @see #readSkills(String, Path)
      */
     public static List<SkillInfo> readSkills(String projectDir) {
-        return readSkills(projectDir, null);
+        return readSkills(projectDir, null, false);
     }
 
     /**
@@ -95,6 +95,18 @@ public final class SkillReader {
      * @return list of available skills, never null
      */
     public static List<SkillInfo> readSkills(String projectDir, Path localSkillsDir) {
+        return readSkills(projectDir, localSkillsDir, false);
+    }
+
+    /**
+     * Reads available skills for a project using the three-layer override chain.
+     *
+     * @param projectDir     the absolute path to the Quarkus project
+     * @param localSkillsDir optional user-level directory to scan for SKILL.md files, or null for the default
+     * @param metadataOnly   if true, only extract frontmatter (name, description, mode) — content will be null
+     * @return list of available skills, never null
+     */
+    public static List<SkillInfo> readSkills(String projectDir, Path localSkillsDir, boolean metadataOnly) {
         // Use a map keyed by skill name so each layer can override the previous
         Map<String, SkillInfo> skillsByName = new LinkedHashMap<>();
 
@@ -111,7 +123,7 @@ public final class SkillReader {
 
             if (jarPath != null) {
                 try {
-                    for (SkillInfo skill : readSkillsFromJar(jarPath)) {
+                    for (SkillInfo skill : readSkillsFromJar(jarPath, metadataOnly)) {
                         skillsByName.put(skill.name(), skill);
                     }
                 } catch (IOException e) {
@@ -124,12 +136,12 @@ public final class SkillReader {
 
         // Layer 2: Overlay user-level skills (~/.quarkus/skills/ or configured dir)
         Path effectiveLocalDir = localSkillsDir != null ? localSkillsDir : DEFAULT_LOCAL_SKILLS_DIR;
-        overlaySkills(skillsByName, readLocalSkills(effectiveLocalDir), effectiveLocalDir.toString());
+        overlaySkills(skillsByName, readLocalSkills(effectiveLocalDir, metadataOnly), effectiveLocalDir.toString());
 
         // Layer 3: Overlay project-level skills (.quarkus/skills/)
         if (projectDir != null) {
             Path projectSkillsDir = Path.of(projectDir, ".quarkus", "skills");
-            overlaySkills(skillsByName, readLocalSkills(projectSkillsDir), projectSkillsDir.toString());
+            overlaySkills(skillsByName, readLocalSkills(projectSkillsDir, metadataOnly), projectSkillsDir.toString());
         }
 
         LOG.infof("Found %d skills for project %s (version %s)",
@@ -142,7 +154,7 @@ public final class SkillReader {
             if (target.containsKey(skill.name())) {
                 if (skill.mode() == SkillMode.ENHANCE) {
                     SkillInfo base = target.get(skill.name());
-                    String mergedContent = base.content() + "\n\n---\n\n" + skill.content();
+                    String mergedContent = mergeContent(base.content(), skill.content());
                     String desc = skill.description() != null ? skill.description() : base.description();
                     target.put(skill.name(), new SkillInfo(skill.name(), desc, mergedContent, SkillMode.ENHANCE));
                     LOG.infof("Skill '%s' enhanced by %s", skill.name(), source);
@@ -162,20 +174,44 @@ public final class SkillReader {
         }
     }
 
+    private static String mergeContent(String base, String overlay) {
+        if (base == null && overlay == null) {
+            return null;
+        }
+        if (base == null) {
+            return overlay;
+        }
+        if (overlay == null) {
+            return base;
+        }
+        return base + "\n\n---\n\n" + overlay;
+    }
+
     /**
      * Parses the YAML frontmatter from a SKILL.md file content.
      */
     static SkillInfo parseFrontmatter(String fullContent) {
+        return parseFrontmatter(fullContent, false);
+    }
+
+    /**
+     * Parses the YAML frontmatter from a SKILL.md file content.
+     *
+     * @param metadataOnly if true, only extract name/description/mode — content will be null
+     */
+    static SkillInfo parseFrontmatter(String fullContent, boolean metadataOnly) {
         String name = "unknown";
         String description = null;
-        String body = fullContent;
+        String body = metadataOnly ? null : fullContent;
         SkillMode mode = SkillMode.ENHANCE;
 
         if (fullContent.startsWith("---")) {
             int endIdx = fullContent.indexOf("---", 3);
             if (endIdx > 0) {
                 String frontmatter = fullContent.substring(3, endIdx);
-                body = fullContent.substring(endIdx + 3).trim();
+                if (!metadataOnly) {
+                    body = fullContent.substring(endIdx + 3).trim();
+                }
 
                 Matcher nameMatcher = FRONTMATTER_NAME.matcher(frontmatter);
                 if (nameMatcher.find()) {
@@ -201,6 +237,15 @@ public final class SkillReader {
      * Reads all SKILL.md files from a single JAR.
      */
     static List<SkillInfo> readSkillsFromJar(Path jarPath) throws IOException {
+        return readSkillsFromJar(jarPath, false);
+    }
+
+    /**
+     * Reads SKILL.md files from a single JAR.
+     *
+     * @param metadataOnly if true, only extract frontmatter — content will be null
+     */
+    static List<SkillInfo> readSkillsFromJar(Path jarPath, boolean metadataOnly) throws IOException {
         List<SkillInfo> skills = new ArrayList<>();
         try (JarFile jar = new JarFile(jarPath.toFile())) {
             Enumeration<JarEntry> entries = jar.entries();
@@ -212,7 +257,7 @@ public final class SkillReader {
                         && !entry.isDirectory()) {
                     try (InputStream is = jar.getInputStream(entry)) {
                         String content = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-                        skills.add(parseFrontmatter(content));
+                        skills.add(parseFrontmatter(content, metadataOnly));
                     }
                 }
             }
@@ -230,6 +275,17 @@ public final class SkillReader {
      * @return list of locally found skills, never null
      */
     static List<SkillInfo> readLocalSkills(Path skillsDir) {
+        return readLocalSkills(skillsDir, false);
+    }
+
+    /**
+     * Reads SKILL.md files from a local directory.
+     *
+     * @param skillsDir    the directory to scan for SKILL.md files
+     * @param metadataOnly if true, only extract frontmatter — content will be null
+     * @return list of locally found skills, never null
+     */
+    static List<SkillInfo> readLocalSkills(Path skillsDir, boolean metadataOnly) {
         if (!Files.isDirectory(skillsDir)) {
             return List.of();
         }
@@ -242,7 +298,7 @@ public final class SkillReader {
                     if (file.getFileName().toString().equals(SKILL_FILE_NAME)) {
                         try {
                             String content = Files.readString(file, StandardCharsets.UTF_8);
-                            SkillInfo skill = parseFrontmatter(content);
+                            SkillInfo skill = parseFrontmatter(content, metadataOnly);
                             skills.add(skill);
                             LOG.debugf("Found local skill '%s' at %s", skill.name(), file);
                         } catch (IOException e) {
