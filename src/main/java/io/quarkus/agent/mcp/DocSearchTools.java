@@ -116,6 +116,8 @@ public class DocSearchTools {
             }
             PgVectorEmbeddingStore store = ensureInitialized(quarkusVersion);
 
+            boolean usingFallback = quarkusVersion != null && containerManager.isUsingFallback(quarkusVersion);
+
             Embedding queryEmbedding = embeddingModel.embed(query).content();
 
             EmbeddingSearchRequest searchRequest = EmbeddingSearchRequest.builder()
@@ -149,7 +151,12 @@ public class DocSearchTools {
                 return ToolResponse.success("No documentation found matching: " + query);
             }
 
-            return ToolResponse.success(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(results));
+            String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(results);
+            if (usingFallback) {
+                json += "\n\nNote: Version-specific docs for Quarkus " + quarkusVersion
+                        + " are not available. Results are from the latest documentation.";
+            }
+            return ToolResponse.success(json);
         } catch (JsonProcessingException e) {
             return ToolResponse.error("Failed to serialize results: " + e.getMessage());
         } catch (Exception e) {

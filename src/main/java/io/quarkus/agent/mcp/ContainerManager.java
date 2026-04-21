@@ -2,9 +2,11 @@ package io.quarkus.agent.mcp;
 
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
+import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
@@ -37,48 +39,61 @@ public class ContainerManager {
     String pgDatabase;
 
     private final ConcurrentHashMap<String, GenericContainer<?>> containers = new ConcurrentHashMap<>();
+    private final Set<String> fallbackVersions = ConcurrentHashMap.newKeySet();
+    private volatile Boolean dockerAvailable;
 
     /**
      * Ensure a pgvector container is running for the given Quarkus version.
-     * Starts it via Testcontainers if needed.
+     * Starts it via Testcontainers if needed. If the version-specific image
+     * is not available, falls back to the default image tag.
      *
      * @param quarkusVersion the Quarkus version for docs, or null for default
      */
     public synchronized void ensureRunning(String quarkusVersion) {
-        String tag = resolveImageTag(quarkusVersion);
-        String key = tag;
+        checkDockerAvailable();
 
-        GenericContainer<?> existing = containers.get(key);
+        String tag = resolveImageTag(quarkusVersion);
+
+        GenericContainer<?> existing = containers.get(tag);
         if (existing != null && existing.isRunning()) {
             return;
         }
 
-        String image = imagePrefix + ":" + tag;
-        LOG.infof("Starting pgvector container with Quarkus %s docs (%s)...", tag, image);
-
-        GenericContainer<?> container = new GenericContainer<>(DockerImageName.parse(image))
-                .withExposedPorts(5432)
-                .withEnv("POSTGRES_USER", pgUser)
-                .withEnv("POSTGRES_PASSWORD", pgPassword)
-                .withEnv("POSTGRES_DB", pgDatabase)
-                .withReuse(true)
-                .withLabel("quarkus-agent-mcp", "doc-search")
-                .withLabel("quarkus-agent-mcp.version", tag)
-                .waitingFor(Wait.forLogMessage(".*database system is ready to accept connections.*\\n", 2));
+        try {
+            startContainer(tag);
+            return;
+        } catch (Exception e) {
+            if (tag.equals(defaultImageTag)) {
+                throw new RuntimeException(
+                        "Failed to start documentation container (image: " + imagePrefix + ":" + tag + "). "
+                                + "Ensure Docker/Podman is running. Error: " + e.getMessage(),
+                        e);
+            }
+            LOG.warnf(e, "Failed to start documentation image %s:%s, falling back to %s:%s",
+                    imagePrefix, tag, imagePrefix, defaultImageTag);
+        }
 
         try {
-            container.start();
+            startContainer(defaultImageTag);
+            containers.put(tag, containers.get(defaultImageTag));
+            fallbackVersions.add(tag);
+            LOG.infof("Using '%s' docs instead of '%s' — docs may not exactly match your Quarkus version",
+                    defaultImageTag, tag);
         } catch (Exception e) {
             throw new RuntimeException(
-                    "Failed to start pgvector container for Quarkus " + tag
-                            + " (image: " + image + "). "
-                            + "Ensure the image exists and Docker/Podman is running. "
+                    "Failed to start documentation container for Quarkus " + tag
+                            + ". Tried version-specific image and fallback (" + defaultImageTag + "). "
                             + "Error: " + e.getMessage(),
                     e);
         }
-        containers.put(key, container);
+    }
 
-        LOG.infof("pgvector container started for Quarkus %s (mapped port: %d)", tag, container.getMappedPort(5432));
+    /**
+     * Returns true if the given version fell back to the default image tag.
+     */
+    public boolean isUsingFallback(String quarkusVersion) {
+        String tag = resolveImageTag(quarkusVersion);
+        return fallbackVersions.contains(tag);
     }
 
     /**
@@ -95,6 +110,47 @@ public class ContainerManager {
     public String getHost(String quarkusVersion) {
         GenericContainer<?> container = getContainer(quarkusVersion);
         return container.getHost();
+    }
+
+    private void checkDockerAvailable() {
+        if (dockerAvailable == null) {
+            try {
+                dockerAvailable = DockerClientFactory.instance().isDockerAvailable();
+            } catch (Exception e) {
+                LOG.debugf("Docker availability check failed: %s", e.getMessage());
+                dockerAvailable = false;
+            }
+            if (dockerAvailable) {
+                LOG.info("Docker/Podman detected — documentation search is available");
+            } else {
+                LOG.info("Docker/Podman not available — documentation search will be disabled");
+            }
+        }
+        if (!dockerAvailable) {
+            throw new RuntimeException(
+                    "Documentation search requires Docker or Podman, but neither is available. "
+                            + "Install Docker (https://docs.docker.com/get-docker/) or Podman, "
+                            + "then restart the MCP server. All other Quarkus tools work without Docker.");
+        }
+    }
+
+    private void startContainer(String tag) {
+        String image = imagePrefix + ":" + tag;
+        LOG.infof("Starting pgvector container with Quarkus %s docs (%s)...", tag, image);
+
+        GenericContainer<?> container = new GenericContainer<>(DockerImageName.parse(image))
+                .withExposedPorts(5432)
+                .withEnv("POSTGRES_USER", pgUser)
+                .withEnv("POSTGRES_PASSWORD", pgPassword)
+                .withEnv("POSTGRES_DB", pgDatabase)
+                .withReuse(true)
+                .withLabel("quarkus-agent-mcp", "doc-search")
+                .withLabel("quarkus-agent-mcp.version", tag)
+                .waitingFor(Wait.forLogMessage(".*database system is ready to accept connections.*\\n", 2));
+
+        container.start();
+        containers.put(tag, container);
+        LOG.infof("pgvector container started for Quarkus %s (mapped port: %d)", tag, container.getMappedPort(5432));
     }
 
     private GenericContainer<?> getContainer(String quarkusVersion) {
