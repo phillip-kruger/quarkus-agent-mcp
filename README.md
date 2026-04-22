@@ -98,6 +98,38 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 }
 ```
 
+#### JetBrains IDEs (IntelliJ IDEA, WebStorm, etc.)
+
+In **Settings → Tools → AI Assistant → MCP Servers** (or the GitHub Copilot MCP settings), add a server with an **absolute path** to `jbang`:
+
+```json
+{
+  "servers": {
+    "quarkus-agent": {
+      "type": "stdio",
+      "command": "/home/you/.jbang/bin/jbang",
+      "args": ["quarkus-agent-mcp@quarkusio"]
+    }
+  }
+}
+```
+
+> **Why absolute paths?** JetBrains IDEs launched from the desktop inherit the **system PATH**, not your shell PATH (`~/.bashrc` / `~/.zshrc`). Tools installed via SDKMAN!, JBang's default installer, asdf, or mise are typically on the shell PATH only — so the IDE can't find them. See [Troubleshooting](#jbang-or-java-not-found-enoent) below.
+
+Alternatively, use the direct download method with an absolute path to `java`:
+
+```json
+{
+  "servers": {
+    "quarkus-agent": {
+      "type": "stdio",
+      "command": "/path/to/java",
+      "args": ["-jar", "/path/to/quarkus-agent-mcp-runner.jar"]
+    }
+  }
+}
+```
+
 ### Via direct download
 
 Download the uber-jar from the [latest GitHub Release](https://github.com/quarkusio/quarkus-agent-mcp/releases/latest), then:
@@ -339,6 +371,63 @@ open presentation/index.html        # macOS
 ```
 
 Press **F** for fullscreen, arrow keys or space to navigate slides.
+
+## Troubleshooting
+
+### `jbang` or `java` not found (ENOENT)
+
+```
+Error: spawn jbang ENOENT
+```
+
+This happens when the MCP client (IDE, desktop app) cannot find `jbang` or `java` on its PATH. It affects **JetBrains IDEs**, **Claude Desktop**, and other desktop applications that don't inherit your shell environment.
+
+**Why it happens:** Desktop applications launched from a graphical environment inherit the **system PATH** (from `systemd` on Linux, or system environment variables on Windows/macOS), not the **shell PATH** (from `~/.bashrc`, `~/.zshrc`, `~/.profile`). Tools installed via user-local version managers — SDKMAN!, JBang's default installer, asdf, mise — are on the shell PATH but not the system PATH.
+
+This is different from VS Code, which typically resolves the full shell environment, and from IDE built-in terminals, which start a proper login shell.
+
+**Solutions (pick one):**
+
+1. **Use absolute paths** in your MCP config (recommended):
+   ```json
+   {
+     "command": "/home/you/.jbang/bin/jbang",
+     "args": ["quarkus-agent-mcp@quarkusio"]
+   }
+   ```
+   Find the path with `which jbang` or `which java` in a terminal.
+
+2. **Symlink into a system PATH directory:**
+   ```bash
+   sudo ln -s ~/.jbang/bin/jbang /usr/local/bin/jbang
+   ```
+
+3. **Add to the system PATH permanently:**
+   - **Linux (systemd):** Create `/etc/profile.d/jbang.sh` with `export PATH="$HOME/.jbang/bin:$PATH"`, or add the path to `~/.config/environment.d/` for systemd user sessions.
+   - **macOS:** Use `launchctl setenv PATH ...` or add to `/etc/paths.d/`.
+   - **Windows:** Add `%USERPROFILE%\.jbang\bin` to the system environment variables (System → Advanced → Environment Variables → System variables → Path).
+
+### `AccessDeniedException: C:\WINDOWS\system32\config` (Windows)
+
+```
+java.nio.file.AccessDeniedException: C:\WINDOWS\system32\config
+```
+
+This is a [Quarkus core issue](https://github.com/quarkusio/quarkus/issues/53739) that occurs on Windows when the MCP server is launched by an IDE with the working directory set to `system32`. Quarkus scans `{working-dir}/config` for configuration files and hits the protected Windows registry hive directory.
+
+**Workaround:** Set the working directory explicitly in your MCP config, or pass `-Duser.dir` to override it:
+
+```json
+{
+  "servers": {
+    "quarkus-agent": {
+      "type": "stdio",
+      "command": "java",
+      "args": ["-Duser.dir=C:\\Users\\you", "-jar", "C:\\path\\to\\quarkus-agent-mcp-runner.jar"]
+    }
+  }
+}
+```
 
 ## Related Projects
 
