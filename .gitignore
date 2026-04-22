@@ -49,3 +49,4 @@ replay_pid*
 
 # Agents
 .claude
+.cachebro/

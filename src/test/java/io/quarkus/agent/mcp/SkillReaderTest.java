@@ -546,6 +546,7 @@ class SkillReaderTest {
                 "quarkus-rest",
                 "### My custom patterns\nUse records for DTOs.",
                 "Custom REST skill",
+                null,
                 SkillReader.SkillMode.ENHANCE,
                 projectDir.toString(), null, true);
 
@@ -568,6 +569,7 @@ class SkillReaderTest {
                 "quarkus-rest",
                 "### Global patterns",
                 null,
+                null,
                 SkillReader.SkillMode.ENHANCE,
                 projectDir.toString(), globalDir, false);
 
@@ -587,6 +589,7 @@ class SkillReaderTest {
                 "quarkus-rest",
                 "### Full replacement",
                 "Override skill",
+                null,
                 SkillReader.SkillMode.OVERRIDE,
                 projectDir.toString(), null, true);
 
@@ -598,16 +601,16 @@ class SkillReaderTest {
     void writeSkillRejectsPathTraversal() {
         Path projectDir = tempDir.resolve("my-project");
         assertThrows(IllegalArgumentException.class, () -> SkillReader.writeSkill(
-                "../etc", "content", null, SkillReader.SkillMode.ENHANCE,
+                "../etc", "content", null, null, SkillReader.SkillMode.ENHANCE,
                 projectDir.toString(), null, true));
         assertThrows(IllegalArgumentException.class, () -> SkillReader.writeSkill(
-                "foo/bar", "content", null, SkillReader.SkillMode.ENHANCE,
+                "foo/bar", "content", null, null, SkillReader.SkillMode.ENHANCE,
                 projectDir.toString(), null, true));
         assertThrows(IllegalArgumentException.class, () -> SkillReader.writeSkill(
-                "foo\\bar", "content", null, SkillReader.SkillMode.ENHANCE,
+                "foo\\bar", "content", null, null, SkillReader.SkillMode.ENHANCE,
                 projectDir.toString(), null, true));
         assertThrows(IllegalArgumentException.class, () -> SkillReader.writeSkill(
-                null, "content", null, SkillReader.SkillMode.ENHANCE,
+                null, "content", null, null, SkillReader.SkillMode.ENHANCE,
                 projectDir.toString(), null, true));
     }
 
@@ -620,6 +623,7 @@ class SkillReaderTest {
                 "quarkus-rest",
                 "### Patterns",
                 "A \"quoted\" description",
+                null,
                 SkillReader.SkillMode.ENHANCE,
                 projectDir.toString(), null, true);
 
@@ -749,5 +753,216 @@ class SkillReaderTest {
         assertEquals(SkillReader.SkillMode.ENHANCE, SkillReader.SkillMode.fromString("anything-else"));
         assertEquals(SkillReader.SkillMode.OVERRIDE, SkillReader.SkillMode.fromString("override"));
         assertEquals(SkillReader.SkillMode.OVERRIDE, SkillReader.SkillMode.fromString("OVERRIDE"));
+    }
+
+    // --- Categories tests ---
+
+    @Test
+    void parseFrontmatterExtractsCategories() {
+        String content = """
+                ---
+                name: quarkus-rest
+                description: "REST extension"
+                categories: "web, reactive"
+                ---
+
+                ### REST
+                """;
+
+        SkillReader.SkillInfo info = SkillReader.parseFrontmatter(content);
+
+        assertEquals("quarkus-rest", info.name());
+        assertEquals(List.of("web", "reactive"), info.categories());
+    }
+
+    @Test
+    void parseFrontmatterExtractsSingleCategory() {
+        String content = """
+                ---
+                name: quarkus-rest
+                category: web
+                ---
+
+                ### REST
+                """;
+
+        SkillReader.SkillInfo info = SkillReader.parseFrontmatter(content);
+
+        assertEquals(List.of("web"), info.categories());
+    }
+
+    @Test
+    void parseFrontmatterExtractsCategoriesUnquoted() {
+        String content = """
+                ---
+                name: quarkus-rest
+                categories: web
+                ---
+
+                ### REST
+                """;
+
+        SkillReader.SkillInfo info = SkillReader.parseFrontmatter(content);
+
+        assertEquals(List.of("web"), info.categories());
+    }
+
+    @Test
+    void parseFrontmatterReturnsNullCategoriesWhenMissing() {
+        String content = """
+                ---
+                name: quarkus-rest
+                description: "REST extension"
+                ---
+
+                ### REST
+                """;
+
+        SkillReader.SkillInfo info = SkillReader.parseFrontmatter(content);
+
+        assertNull(info.categories());
+    }
+
+    @Test
+    void enhanceModeMergesCategories() throws Exception {
+        Path jarPath = tempDir.resolve("skills.jar");
+        try (JarOutputStream jos = new JarOutputStream(new FileOutputStream(jarPath.toFile()))) {
+            jos.putNextEntry(new JarEntry("META-INF/skills/quarkus-rest/SKILL.md"));
+            jos.write("""
+                    ---
+                    name: quarkus-rest
+                    description: "REST extension"
+                    categories: "web, reactive"
+                    ---
+
+                    ### Base REST
+                    """.getBytes(StandardCharsets.UTF_8));
+            jos.closeEntry();
+        }
+
+        Path skillsDir = tempDir.resolve("local-skills/quarkus-rest");
+        Files.createDirectories(skillsDir);
+        Files.writeString(skillsDir.resolve("SKILL.md"), """
+                ---
+                name: quarkus-rest
+                mode: enhance
+                ---
+
+                ### Extra patterns
+                """);
+
+        List<SkillReader.SkillInfo> base = SkillReader.readSkillsFromJar(jarPath);
+        java.util.Map<String, SkillReader.SkillInfo> skillMap = new java.util.LinkedHashMap<>();
+        for (SkillReader.SkillInfo s : base) {
+            skillMap.put(s.name(), s);
+        }
+
+        List<SkillReader.SkillInfo> local = SkillReader.readLocalSkills(tempDir.resolve("local-skills"));
+        SkillReader.overlaySkills(skillMap, local, "local-skills");
+
+        assertEquals(List.of("web", "reactive"), skillMap.get("quarkus-rest").categories());
+    }
+
+    @Test
+    void enhanceModeOverlayCanOverrideCategories() throws Exception {
+        Path jarPath = tempDir.resolve("skills.jar");
+        try (JarOutputStream jos = new JarOutputStream(new FileOutputStream(jarPath.toFile()))) {
+            jos.putNextEntry(new JarEntry("META-INF/skills/quarkus-rest/SKILL.md"));
+            jos.write("""
+                    ---
+                    name: quarkus-rest
+                    categories: "web"
+                    ---
+
+                    ### Base REST
+                    """.getBytes(StandardCharsets.UTF_8));
+            jos.closeEntry();
+        }
+
+        Path skillsDir = tempDir.resolve("local-skills/quarkus-rest");
+        Files.createDirectories(skillsDir);
+        Files.writeString(skillsDir.resolve("SKILL.md"), """
+                ---
+                name: quarkus-rest
+                categories: "messaging, reactive"
+                mode: enhance
+                ---
+
+                ### Extra patterns
+                """);
+
+        List<SkillReader.SkillInfo> base = SkillReader.readSkillsFromJar(jarPath);
+        java.util.Map<String, SkillReader.SkillInfo> skillMap = new java.util.LinkedHashMap<>();
+        for (SkillReader.SkillInfo s : base) {
+            skillMap.put(s.name(), s);
+        }
+
+        List<SkillReader.SkillInfo> local = SkillReader.readLocalSkills(tempDir.resolve("local-skills"));
+        SkillReader.overlaySkills(skillMap, local, "local-skills");
+
+        assertEquals(List.of("messaging", "reactive"), skillMap.get("quarkus-rest").categories());
+    }
+
+    @Test
+    void writeSkillIncludesCategories() throws Exception {
+        Path projectDir = tempDir.resolve("my-project");
+        Files.createDirectories(projectDir);
+
+        Path written = SkillReader.writeSkill(
+                "quarkus-rest",
+                "### Patterns",
+                "REST skill",
+                List.of("web", "reactive"),
+                SkillReader.SkillMode.ENHANCE,
+                projectDir.toString(), null, true);
+
+        String content = Files.readString(written);
+        assertTrue(content.contains("categories: \"web, reactive\""));
+    }
+
+    @Test
+    void writeSkillOmitsCategoriesWhenNull() throws Exception {
+        Path projectDir = tempDir.resolve("my-project");
+        Files.createDirectories(projectDir);
+
+        Path written = SkillReader.writeSkill(
+                "quarkus-rest",
+                "### Patterns",
+                "REST skill",
+                null,
+                SkillReader.SkillMode.ENHANCE,
+                projectDir.toString(), null, true);
+
+        String content = Files.readString(written);
+        assertFalse(content.contains("categories:"));
+    }
+
+    @Test
+    void parseCategoriesHandlesCommaSeparated() {
+        assertEquals(List.of("web", "reactive"), SkillReader.parseCategories("web, reactive"));
+        assertEquals(List.of("web"), SkillReader.parseCategories("web"));
+        assertNull(SkillReader.parseCategories("  "));
+    }
+
+    @Test
+    void parseCategoriesNormalizesToLowercase() {
+        assertEquals(List.of("web", "reactive"), SkillReader.parseCategories("Web, Reactive"));
+        assertEquals(List.of("data"), SkillReader.parseCategories("DATA"));
+    }
+
+    @Test
+    void parseFrontmatterNormalizesCategoriesToLowercase() {
+        String content = """
+                ---
+                name: quarkus-rest
+                categories: "Web, Reactive"
+                ---
+
+                ### REST
+                """;
+
+        SkillReader.SkillInfo info = SkillReader.parseFrontmatter(content);
+
+        assertEquals(List.of("web", "reactive"), info.categories());
     }
 }

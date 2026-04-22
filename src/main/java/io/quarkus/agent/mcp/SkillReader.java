@@ -55,7 +55,8 @@ public final class SkillReader {
     private static final Pattern FRONTMATTER_NAME = Pattern.compile("^name:\\s*(.+)$", Pattern.MULTILINE);
     private static final Pattern FRONTMATTER_DESC = Pattern.compile("^description:\\s*\"(.+)\"$", Pattern.MULTILINE);
     private static final Pattern FRONTMATTER_MODE = Pattern.compile("^mode:\\s*(\\S+)", Pattern.MULTILINE);
-
+    private static final Pattern FRONTMATTER_CATEGORIES = Pattern.compile(
+            "^categor(?:y|ies):\\s*\"?([^\"\\n]+?)\"?\\s*$", Pattern.MULTILINE);
 
     public enum SkillMode {
         ENHANCE,
@@ -69,7 +70,7 @@ public final class SkillReader {
         }
     }
 
-    public record SkillInfo(String name, String description, String content, SkillMode mode) {
+    public record SkillInfo(String name, String description, String content, SkillMode mode, List<String> categories) {
     }
 
     private SkillReader() {
@@ -156,7 +157,10 @@ public final class SkillReader {
                     SkillInfo base = target.get(skill.name());
                     String mergedContent = mergeContent(base.content(), skill.content());
                     String desc = skill.description() != null ? skill.description() : base.description();
-                    target.put(skill.name(), new SkillInfo(skill.name(), desc, mergedContent, SkillMode.ENHANCE));
+                    List<String> cats = skill.categories() != null && !skill.categories().isEmpty()
+                            ? skill.categories()
+                            : base.categories();
+                    target.put(skill.name(), new SkillInfo(skill.name(), desc, mergedContent, SkillMode.ENHANCE, cats));
                     LOG.infof("Skill '%s' enhanced by %s", skill.name(), source);
                 } else {
                     target.put(skill.name(), skill);
@@ -204,6 +208,7 @@ public final class SkillReader {
         String description = null;
         String body = metadataOnly ? null : fullContent;
         SkillMode mode = SkillMode.ENHANCE;
+        List<String> categories = null;
 
         if (fullContent.startsWith("---")) {
             int endIdx = fullContent.indexOf("---", 3);
@@ -227,10 +232,26 @@ public final class SkillReader {
                 if (modeMatcher.find()) {
                     mode = SkillMode.fromString(modeMatcher.group(1));
                 }
+
+                Matcher catMatcher = FRONTMATTER_CATEGORIES.matcher(frontmatter);
+                if (catMatcher.find()) {
+                    categories = parseCategories(catMatcher.group(1).trim());
+                }
             }
         }
 
-        return new SkillInfo(name, description, body, mode);
+        return new SkillInfo(name, description, body, mode, categories);
+    }
+
+    static List<String> parseCategories(String value) {
+        List<String> result = new ArrayList<>();
+        for (String part : value.split(",")) {
+            String trimmed = part.trim().toLowerCase();
+            if (!trimmed.isEmpty()) {
+                result.add(trimmed);
+            }
+        }
+        return result.isEmpty() ? null : List.copyOf(result);
     }
 
     /**
@@ -320,6 +341,7 @@ public final class SkillReader {
      * @param skillName    the extension name (e.g. "quarkus-rest")
      * @param content      the markdown content (without frontmatter)
      * @param description  optional description for the frontmatter
+     * @param categories   optional list of categories for the skill index, or null
      * @param mode         ENHANCE or OVERRIDE
      * @param projectDir   the project directory (used for project-scope writes)
      * @param localSkillsDir user-level skills directory, or null for the default
@@ -327,7 +349,7 @@ public final class SkillReader {
      *                     false to write under the user-level directory
      * @return the path the file was written to
      */
-    static Path writeSkill(String skillName, String content, String description,
+    static Path writeSkill(String skillName, String content, String description, List<String> categories,
             SkillMode mode, String projectDir, Path localSkillsDir, boolean projectScope) throws IOException {
         if (skillName == null || !VALID_SKILL_NAME.matcher(skillName).matches()) {
             throw new IllegalArgumentException("Invalid skill name: " + skillName
@@ -349,6 +371,9 @@ public final class SkillReader {
         sb.append("name: ").append(skillName).append("\n");
         if (description != null && !description.isBlank()) {
             sb.append("description: \"").append(description.replace("\"", "\\\"")).append("\"\n");
+        }
+        if (categories != null && !categories.isEmpty()) {
+            sb.append("categories: \"").append(String.join(", ", categories)).append("\"\n");
         }
         sb.append("mode: ").append(mode.name().toLowerCase()).append("\n");
         sb.append("---\n\n");

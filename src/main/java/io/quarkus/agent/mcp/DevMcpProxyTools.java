@@ -1,5 +1,12 @@
 package io.quarkus.agent.mcp;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.quarkiverse.mcp.server.Tool;
+import io.quarkiverse.mcp.server.ToolArg;
+import io.quarkiverse.mcp.server.ToolResponse;
+import jakarta.inject.Inject;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpRequest;
@@ -7,23 +14,15 @@ import java.net.http.HttpResponse;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
-
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import io.quarkiverse.mcp.server.Tool;
-import io.quarkiverse.mcp.server.ToolArg;
-import io.quarkiverse.mcp.server.ToolResponse;
-import jakarta.inject.Inject;
 
 /**
  * MCP tools that proxy requests to a running Quarkus application's Dev MCP server.
@@ -34,6 +33,25 @@ public class DevMcpProxyTools {
     private static final Logger LOG = Logger.getLogger(DevMcpProxyTools.class);
 
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
+
+    static final List<String> CATEGORY_ORDER = List.of(
+            "web", "data", "security", "core", "messaging", "observability",
+            "cloud", "reactive", "serialization", "compatibility", "ai", "alt-languages", "miscellaneous");
+
+    private static final Set<String> ACRONYMS = Set.of("ai", "api", "cdi", "jpa", "ui");
+
+    static final Map<String, String> DEFAULT_CATEGORIES = Map.ofEntries(
+            Map.entry("quarkus-rest", "web"),
+            Map.entry("quarkus-rest-client", "web"),
+            Map.entry("quarkus-smallrye-openapi", "web"),
+            Map.entry("quarkus-web-dependency-locator", "web"),
+            Map.entry("quarkus-hibernate-orm", "data"),
+            Map.entry("quarkus-hibernate-orm-panache", "data"),
+            Map.entry("quarkus-hibernate-validator", "data"),
+            Map.entry("quarkus-oidc", "security"),
+            Map.entry("quarkus-security", "security"),
+            Map.entry("quarkus-arc", "core"),
+            Map.entry("quarkus-scheduler", "core"));
 
     private final AtomicLong requestId = new AtomicLong(0);
 
@@ -137,18 +155,9 @@ public class DevMcpProxyTools {
                 return ToolResponse.success("No skills found matching: " + query);
             }
 
-            // Multiple skills and no query — return summary list (no content needed)
+            // Multiple skills and no query — return categorized index
             if (queryLower == null && matched.size() > 1) {
-                StringBuilder sb = new StringBuilder();
-                sb.append("Available extension skills (use query parameter to read a specific skill):\n\n");
-                for (SkillReader.SkillInfo skill : matched) {
-                    sb.append("- **").append(skill.name()).append("**");
-                    if (skill.description() != null) {
-                        sb.append(": ").append(skill.description());
-                    }
-                    sb.append("\n");
-                }
-                return ToolResponse.success(sb.toString());
+                return ToolResponse.success(formatSkillIndex(matched));
             }
 
             // Single skill without query — we only read metadata, so re-read with content
@@ -191,6 +200,70 @@ public class DevMcpProxyTools {
         return SkillReader.readSkills(projectDir, localSkillsDir.map(Path::of).orElse(null), metadataOnly);
     }
 
+    static String formatSkillIndex(List<SkillReader.SkillInfo> skills) {
+        Map<String, List<SkillReader.SkillInfo>> grouped = new LinkedHashMap<>();
+        for (SkillReader.SkillInfo skill : skills) {
+            for (String category : resolveCategories(skill)) {
+                grouped.computeIfAbsent(category, k -> new ArrayList<>()).add(skill);
+            }
+        }
+
+        // Known categories first in defined order, then any unknown alphabetically
+        List<String> sortedCategories = new ArrayList<>();
+        Set<String> added = new HashSet<>();
+        for (String cat : CATEGORY_ORDER) {
+            if (grouped.containsKey(cat)) {
+                sortedCategories.add(cat);
+                added.add(cat);
+            }
+        }
+        grouped.keySet().stream()
+                .filter(c -> !added.contains(c))
+                .sorted()
+                .forEach(sortedCategories::add);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Available extension skills (use query parameter to read a specific skill):\n");
+        for (String category : sortedCategories) {
+            sb.append("\n### ").append(titleCase(category)).append("\n");
+            for (SkillReader.SkillInfo skill : grouped.get(category)) {
+                sb.append("- **").append(skill.name()).append("**");
+                if (skill.description() != null) {
+                    sb.append(": ").append(skill.description());
+                }
+                sb.append("\n");
+            }
+        }
+        return sb.toString();
+    }
+
+    static List<String> resolveCategories(SkillReader.SkillInfo skill) {
+        if (skill.categories() != null && !skill.categories().isEmpty()) {
+            return skill.categories();
+        }
+        String defaultCat = DEFAULT_CATEGORIES.get(skill.name());
+        return List.of(defaultCat != null ? defaultCat : "miscellaneous");
+    }
+
+    static String titleCase(String value) {
+        if (value == null || value.isEmpty()) {
+            return value;
+        }
+        String[] parts = value.split("-");
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < parts.length; i++) {
+            if (i > 0) {
+                sb.append("-");
+            }
+            if (ACRONYMS.contains(parts[i])) {
+                sb.append(parts[i].toUpperCase());
+            } else {
+                sb.append(Character.toUpperCase(parts[i].charAt(0))).append(parts[i].substring(1));
+            }
+        }
+        return sb.toString();
+    }
+
     @Tool(name = "quarkus_updateSkill", description = "Create or update a skill customization for a Quarkus extension. "
             + "Use this when the user wants to add project conventions, team standards, or guardrails to an extension skill. "
             + "IMPORTANT: Before writing, ask the user two questions: "
@@ -206,6 +279,7 @@ public class DevMcpProxyTools {
             @ToolArg(description = "The extension skill name (e.g. 'quarkus-rest', 'quarkus-hibernate-orm-panache')") String skillName,
             @ToolArg(description = "The skill content in markdown (without frontmatter -- it will be generated)") String content,
             @ToolArg(description = "Optional description for the skill", required = false) String description,
+            @ToolArg(description = "Optional comma-separated categories for the skill index (e.g. 'web', 'data', 'security', 'core')", required = false) String categories,
             @ToolArg(description = "Mode: 'enhance' (default) appends to the base skill, 'override' fully replaces it", required = false) String mode,
             @ToolArg(description = "Scope: 'project' (default) saves under .quarkus/skills/ in the project, "
                     + "'global' saves under ~/.quarkus/skills/", required = false) String scope) {
@@ -213,8 +287,9 @@ public class DevMcpProxyTools {
             SkillReader.SkillMode skillMode = SkillReader.SkillMode.fromString(mode);
             boolean projectScope = !"global".equalsIgnoreCase(scope);
 
+            List<String> parsedCategories = categories != null ? SkillReader.parseCategories(categories) : null;
             Path written = SkillReader.writeSkill(
-                    skillName, content, description, skillMode,
+                    skillName, content, description, parsedCategories, skillMode,
                     projectDir, localSkillsDir.map(Path::of).orElse(null), projectScope);
 
             String modeLabel = skillMode == SkillReader.SkillMode.ENHANCE ? "enhance" : "override";
