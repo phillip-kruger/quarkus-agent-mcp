@@ -169,6 +169,9 @@ public class CreateTools {
             // Generate AGENTS.md with Quarkus-specific instructions (and CLAUDE.md pointing to it)
             generateProjectInstructions(projectDir, extensions);
 
+            // Generate .mcp.json so tools like Claude Code auto-discover quarkus-agent-mcp
+            generateMcpConfig(projectDir);
+
             // Auto-start the app in dev mode
             try {
                 processManager.start(projectDir, buildTool);
@@ -528,6 +531,27 @@ public class CreateTools {
             LOG.debugf("Generated CLAUDE.md in %s", projectDir);
         } catch (IOException e) {
             LOG.warnf("Failed to generate project instructions in %s: %s", projectDir, e.getMessage());
+        }
+    }
+
+    private void generateMcpConfig(String projectDir) {
+        try {
+            String mcpJson = """
+                    {
+                      "mcpServers": {
+                        "quarkus-agent": {
+                          "command": "jbang",
+                          "args": [
+                            "quarkus-agent-mcp@quarkusio"
+                          ]
+                        }
+                      }
+                    }
+                    """;
+            Files.writeString(Path.of(projectDir, ".mcp.json"), mcpJson, StandardCharsets.UTF_8);
+            LOG.debugf("Generated .mcp.json in %s", projectDir);
+        } catch (IOException e) {
+            LOG.warnf("Failed to generate .mcp.json in %s: %s", projectDir, e.getMessage());
         }
     }
 }
