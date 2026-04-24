@@ -455,7 +455,7 @@ public class CreateTools {
 
                     ## Required Workflow
 
-                    1. **Use quarkus_update (via subagent) when returning to this project** -- checks if the Quarkus version is up-to-date and suggests upgrades.
+                    1. **Use quarkus_update (via a subagent if supported) when returning to this project** -- checks if the Quarkus version is up-to-date and suggests upgrades.
                     2. **Use quarkus_skills BEFORE writing any code or tests** -- it contains extension-specific patterns, testing approaches, and common pitfalls that prevent mistakes. Skills may also list **Available Dev MCP Tools** specific to each extension (e.g. OpenAPI schema retrieval, scheduler job management) -- use these via `quarkus_callTool`. Call this EVERY time you are about to add or modify a feature, not just at project creation.
                     3. **Use quarkus_searchDocs for Quarkus documentation** -- do NOT use generic documentation tools (Context7, web search). The Quarkus doc search is version-aware and more accurate.
                     4. **Use quarkus_searchTools to discover Dev MCP tools** on the running app for testing, config changes, and extension management. The tool list is **dynamic** -- it changes when extensions are added or removed. Re-call `quarkus_searchTools` after any extension change to discover newly available tools. Note: some extension-specific tools are also documented in the skills output (see step 2).
@@ -476,10 +476,10 @@ public class CreateTools {
 
                     ## Testing
 
-                    ALWAYS run tests using a **subagent** so the main conversation stays responsive:
+                    If your agent supports subagents, run tests in a **subagent** so the main conversation stays responsive:
 
                     ```
-                    Use the Agent tool to launch a subagent with this prompt:
+                    If supported, use the Agent tool to launch a subagent with this prompt:
                       "Run the Quarkus tests for project <projectDir> using quarkus_callTool
                        with toolName 'devui-testing_runTests'. Analyze the results and report
                        which tests passed, failed, or errored. If tests fail, include the
@@ -489,7 +489,7 @@ public class CreateTools {
                     - Use `devui-testing_runTests` to run all tests.
                     - Use `devui-testing_runTest` with arguments `{"className":"com.example.MyTest"}` to run a specific test class.
                     - Do NOT run Maven/Gradle test commands manually -- the Dev MCP test tools handle compilation, hot reload, and result reporting.
-                    - After fixing test failures, re-run tests with a subagent to verify the fix.
+                    - After fixing test failures, re-run tests (via a subagent if supported) to verify the fix.
 
                     ## Error Handling
 

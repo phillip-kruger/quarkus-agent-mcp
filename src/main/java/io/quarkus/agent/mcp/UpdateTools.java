@@ -44,7 +44,7 @@ public class UpdateTools {
     @Tool(name = "quarkus_update", description = "Check if a Quarkus project is up-to-date and provide an upgrade report. "
             + "Detects the current version, checks for newer releases, compares build files against "
             + "reference projects, and optionally runs 'quarkus update --dry-run' to preview migrations. "
-            + "IMPORTANT: For existing Quarkus projects, ALWAYS call this tool using a subagent BEFORE "
+            + "IMPORTANT: For existing Quarkus projects, ALWAYS call this tool (via a subagent if supported) BEFORE "
             + "starting any development work to ensure the project is on the latest version.",
             // title set as workaround: the framework serializes "title":null when unset, which violates the MCP schema
             // see https://github.com/quarkiverse/quarkus-mcp-server/issues/748

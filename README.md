@@ -176,7 +176,7 @@ Ask your agent to build a Quarkus application using natural language. The agent 
 >
 > **You:** Add a `Greeting` entity and a REST endpoint that stores and retrieves greetings
 >
-> **Agent:** _(writes the code following patterns from skills, then runs tests via a subagent using `quarkus_callTool`)_
+> **Agent:** _(writes the code following patterns from skills, then runs tests using `quarkus_callTool` — via a subagent if supported)_
 
 ### Development workflow
 
@@ -185,7 +185,7 @@ The MCP server guides the agent through the optimal Quarkus development workflow
 ```
 NEW PROJECT                           EXISTING PROJECT
 
-1. quarkus_create                     1. quarkus_update (via subagent)
+1. quarkus_create                     1. quarkus_update
    → scaffolds + auto-starts             → checks version, suggests upgrades
    → generates CLAUDE.md
                                       2. quarkus_start
@@ -197,9 +197,9 @@ NEW PROJECT                           EXISTING PROJECT
                                       4. quarkus_searchDocs
 4. Write code + tests                    → look up APIs, config
 
-5. Run tests (via subagent)           5. Write code + tests
+5. Run tests                          5. Write code + tests
    → quarkus_callTool
-   → devui-testing_runTests           6. Run tests (via subagent)
+   → devui-testing_runTests           6. Run tests
                                          → quarkus_callTool
 6. Iterate                               → devui-testing_runTests
 ```
@@ -208,7 +208,7 @@ NEW PROJECT                           EXISTING PROJECT
 
 - **Hot reload** is automatic in Quarkus dev mode — triggered on the next access (HTTP request or test run), not on file save.
 - **Skills before code** — the agent reads extension-specific skills to learn correct patterns, testing approaches, and common pitfalls before writing any code.
-- **Tests via subagents** — test execution is dispatched to a subagent so the main conversation stays responsive.
+- **Tests via subagents** — if your agent supports subagents, test execution can be dispatched to one so the main conversation stays responsive.
 - **The MCP server survives crashes** — if the app crashes due to a code error, the agent can use `devui-exceptions_getLastException` to get structured exception details (class, message, stack trace, user code location) and fix it. Use `quarkus_logs` for broader context.
 - **CLAUDE.md** — every new project gets a `CLAUDE.md` with Quarkus-specific workflow instructions that guide the agent.
 
