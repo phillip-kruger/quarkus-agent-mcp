@@ -7,8 +7,10 @@ import java.io.File;
 import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.context.ManagedExecutor;
 import org.jboss.logging.Logger;
 
@@ -25,6 +27,12 @@ public class QuarkusProcessManager {
 
     @Inject
     ManagedExecutor executor;
+
+    @ConfigProperty(name = "agent-mcp.process.mvn-cmd")
+    Optional<String> mvnCmd;
+
+    @ConfigProperty(name = "agent-mcp.process.gradle-cmd")
+    Optional<String> gradleCmd;
 
     private static final Set<String> VALID_BUILD_TOOLS = Set.of("maven", "gradle");
 
@@ -153,26 +161,34 @@ public class QuarkusProcessManager {
     }
 
     private ProcessBuilder createMavenProcessBuilder(File projectDir) {
-        String mvnCmd;
-        File wrapper = isWindows() ? new File(projectDir, "mvnw.cmd") : new File(projectDir, "mvnw");
-        if (wrapper.exists() && verifyTrustedWrapper(wrapper)) {
-            mvnCmd = isWindows() ? "mvnw.cmd" : "./mvnw";
+        String cmd;
+        if (mvnCmd.isPresent()) {
+            cmd = mvnCmd.get();
         } else {
-            mvnCmd = "mvn";
+            File wrapper = isWindows() ? new File(projectDir, "mvnw.cmd") : new File(projectDir, "mvnw");
+            if (wrapper.exists() && verifyTrustedWrapper(wrapper)) {
+                cmd = isWindows() ? "mvnw.cmd" : "./mvnw";
+            } else {
+                cmd = "mvn";
+            }
         }
-        return new ProcessBuilder(mvnCmd, "quarkus:dev", "-Dquarkus.console.basic=true",
+        return new ProcessBuilder(cmd, "quarkus:dev", "-Dquarkus.console.basic=true",
                 "-Dquarkus.dev-mcp.enabled=true");
     }
 
     private ProcessBuilder createGradleProcessBuilder(File projectDir) {
-        String gradleCmd;
-        File wrapper = isWindows() ? new File(projectDir, "gradlew.bat") : new File(projectDir, "gradlew");
-        if (wrapper.exists() && verifyTrustedWrapper(wrapper)) {
-            gradleCmd = isWindows() ? "gradlew.bat" : "./gradlew";
+        String cmd;
+        if (gradleCmd.isPresent()) {
+            cmd = gradleCmd.get();
         } else {
-            gradleCmd = "gradle";
+            File wrapper = isWindows() ? new File(projectDir, "gradlew.bat") : new File(projectDir, "gradlew");
+            if (wrapper.exists() && verifyTrustedWrapper(wrapper)) {
+                cmd = isWindows() ? "gradlew.bat" : "./gradlew";
+            } else {
+                cmd = "gradle";
+            }
         }
-        return new ProcessBuilder(gradleCmd, "quarkusDev", "-Dquarkus.console.basic=true",
+        return new ProcessBuilder(cmd, "quarkusDev", "-Dquarkus.console.basic=true",
                 "-Dquarkus.dev-mcp.enabled=true");
     }
 
