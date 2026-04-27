@@ -54,6 +54,7 @@
         <langchain4j.version>1.12.2-beta22</langchain4j.version>
         <skipITs>true</skipITs>
         <surefire-plugin.version>3.5.4</surefire-plugin.version>
+        <djl.version>0.28.0</djl.version>
         <testcontainers.version>2.0.5</testcontainers.version>
     </properties>
 
@@ -65,6 +66,18 @@
                 <version>${quarkus.platform.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <!-- Pin DJL to 0.28.x: version 0.31.1 (pulled by langchain4j) fails to load
+                 the Huggingface tokenizer native library on macOS with "Unexpected flavor: cpu" -->
+            <dependency>
+                <groupId>ai.djl</groupId>
+                <artifactId>api</artifactId>
+                <version>${djl.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>ai.djl.huggingface</groupId>
+                <artifactId>tokenizers</artifactId>
+                <version>${djl.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
