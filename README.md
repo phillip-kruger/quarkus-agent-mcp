@@ -149,13 +149,15 @@ Pre-built native binaries are available on each [GitHub Release](https://github.
 | macOS Apple Silicon | `quarkus-agent-mcp-<version>-macos-aarch64` |
 
 ```bash
-# Download (replace the artifact name for your platform)
+# Download the latest version (replace PLATFORM with your platform from the table above)
+PLATFORM=linux-x86_64
+VERSION=$(curl -sI https://github.com/quarkusio/quarkus-agent-mcp/releases/latest | grep -i ^location: | sed 's|.*/||' | tr -d '\r')
 curl -L -o quarkus-agent-mcp \
-  https://github.com/quarkusio/quarkus-agent-mcp/releases/latest/download/quarkus-agent-mcp-linux-x86_64
+  "https://github.com/quarkusio/quarkus-agent-mcp/releases/download/${VERSION}/quarkus-agent-mcp-${VERSION}-${PLATFORM}"
 chmod +x quarkus-agent-mcp
 
-# Register with Claude Code
-claude mcp add quarkus-agent -- /path/to/quarkus-agent-mcp
+# Register with Claude Code (globally)
+claude mcp add -s user quarkus-agent -- /path/to/quarkus-agent-mcp
 ```
 
 No JVM or JBang installation required.
