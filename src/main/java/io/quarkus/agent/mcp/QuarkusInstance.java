@@ -75,15 +75,18 @@ public class QuarkusInstance {
             String line;
             while ((line = reader.readLine()) != null) {
                 appendLog(line);
-                System.err.println(line);
+                String clean = ANSI.matcher(line).replaceAll("");
+                if (!clean.isBlank()) {
+                    System.err.println(clean);
+                }
 
-                if (line.contains("Listening on:")) {
-                    parsePort(line);
+                if (clean.contains("Listening on:")) {
+                    parsePort(clean);
                 }
-                if (line.contains("Dev MCP available at:")) {
-                    parseDevMcpPath(line);
+                if (clean.contains("Dev MCP available at:")) {
+                    parseDevMcpPath(clean);
                 }
-                if (status.get() == Status.STARTING && isStartedLine(line)) {
+                if (status.get() == Status.STARTING && isStartedLine(clean)) {
                     status.compareAndSet(Status.STARTING, Status.RUNNING);
                 }
             }
@@ -118,11 +121,10 @@ public class QuarkusInstance {
     }
 
     private void parseDevMcpPath(String line) {
-        String clean = ANSI.matcher(line).replaceAll("");
         String marker = "Dev MCP available at:";
-        int idx = clean.indexOf(marker);
+        int idx = line.indexOf(marker);
         if (idx >= 0) {
-            String path = clean.substring(idx + marker.length()).trim();
+            String path = line.substring(idx + marker.length()).trim();
             if (!path.isEmpty()) {
                 devMcpPath = path;
             }
@@ -130,14 +132,13 @@ public class QuarkusInstance {
     }
 
     private int parsePortFromLine(String line) {
-        String clean = ANSI.matcher(line).replaceAll("");
-        int idx = clean.indexOf("http://");
+        int idx = line.indexOf("http://");
         if (idx < 0) {
-            idx = clean.indexOf("https://");
+            idx = line.indexOf("https://");
         }
         if (idx >= 0) {
             try {
-                String url = clean.substring(idx).trim();
+                String url = line.substring(idx).trim();
                 int spaceIdx = url.indexOf(' ');
                 if (spaceIdx > 0) {
                     url = url.substring(0, spaceIdx);

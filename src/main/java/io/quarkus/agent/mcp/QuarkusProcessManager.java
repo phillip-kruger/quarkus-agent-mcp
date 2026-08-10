@@ -238,7 +238,7 @@ public class QuarkusProcessManager {
         command.add(mvnCmd);
         if (isDevMode()) {
             command.addAll(List.of("quarkus:dev",
-                    "-Dquarkus.console.basic=true", "-Dquarkus.dev-mcp.enabled=true"));
+                    "-Dquarkus.console.enabled=false", "-Dquarkus.dev-mcp.enabled=true"));
         } else {
             command.add("quarkus:run");
             if ("test".equals(mode)) {
@@ -255,7 +255,7 @@ public class QuarkusProcessManager {
         String cmd = gradleCmd.orElseGet(() -> ProcessUtils.resolveGradleCommand(projectDir));
         if (isDevMode()) {
             return new ProcessBuilder(cmd, "quarkusDev",
-                    "-Dquarkus.console.basic=true", "-Dquarkus.dev-mcp.enabled=true");
+                    "-Dquarkus.console.enabled=false", "-Dquarkus.dev-mcp.enabled=true");
         }
         var command = new ArrayList<>(List.of(cmd, "quarkusRun"));
         if ("test".equals(mode)) {

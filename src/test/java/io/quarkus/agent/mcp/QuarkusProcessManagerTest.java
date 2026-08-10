@@ -333,7 +333,7 @@ class QuarkusProcessManagerTest {
         ProcessBuilder pb = (ProcessBuilder) m.invoke(manager, tempDir.toString(), "maven", (Integer) null, (String) null, (String) null);
         assertTrue(pb.command().contains("quarkus:dev"));
         assertTrue(pb.command().contains("-Dquarkus.dev-mcp.enabled=true"));
-        assertTrue(pb.command().contains("-Dquarkus.console.basic=true"));
+        assertTrue(pb.command().contains("-Dquarkus.console.enabled=false"));
     }
 
     @Test
@@ -347,7 +347,7 @@ class QuarkusProcessManagerTest {
         assertTrue(pb.command().contains("quarkus:run"));
         assertFalse(pb.command().contains("quarkus:dev"));
         assertFalse(pb.command().contains("-Dquarkus.dev-mcp.enabled=true"));
-        assertFalse(pb.command().contains("-Dquarkus.console.basic=true"));
+        assertFalse(pb.command().contains("-Dquarkus.console.enabled=false"));
         assertFalse(pb.command().contains("-Dquarkus.profile=test"));
     }
 
