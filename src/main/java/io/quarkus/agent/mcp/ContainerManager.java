@@ -3,6 +3,8 @@ package io.quarkus.agent.mcp;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -111,6 +113,8 @@ public class ContainerManager {
             return;
         }
 
+        removeStaleContainers(versionKey);
+
         if (supportsRagSql(quarkusVersion)) {
             try {
                 startGenericContainer(versionKey);
@@ -180,6 +184,30 @@ public class ContainerManager {
     public int getEmbeddingPort() {
         GenericContainer<?> container = getContainer(null);
         return container.getMappedPort(9222);
+    }
+
+    private void removeStaleContainers(String versionKey) {
+        try {
+            var client = DockerClientFactory.instance().client();
+            var stale = client.listContainersCmd()
+                    .withLabelFilter(Map.of(
+                            "quarkus-agent-mcp", "doc-search",
+                            "quarkus-agent-mcp.version", versionKey))
+                    .withStatusFilter(List.of("exited", "dead", "created"))
+                    .exec();
+
+            for (var container : stale) {
+                var shortId = container.getId().substring(0, 12);
+                LOG.infof("Removing stale doc-search container %s (status: %s)",
+                        shortId, container.getState());
+                client.removeContainerCmd(container.getId())
+                        .withRemoveVolumes(true)
+                        .exec();
+            }
+        } catch (Exception e) {
+            LOG.debugf("Failed to clean up stale containers for version %s: %s",
+                    versionKey, e.getMessage());
+        }
     }
 
     private void checkDockerAvailable() {
